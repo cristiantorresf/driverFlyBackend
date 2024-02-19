@@ -9,7 +9,8 @@
     ],
     "types": [
       "reflect-metadata",
-      "jest"
+      "jest",
+      "node"
     ],
     "target": "es6",
     "noImplicitAny": true,

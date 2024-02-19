@@ -11,17 +11,12 @@ import { expressMiddleware } from '@apollo/server/express4'
 import * as dotenv from 'dotenv'
 import { SendTokenOverHeaders } from './apolloPlugins'
 import { MainContexter } from './apolloContexters'
+import { Container } from 'typedi'
+import { LoggerService } from './services/LoggerService'
+import db from './db/db'
+import { Trip } from './db/entities/trip'
 
 dotenv.config()
-
-
-// export function addDependencies() {
-//   // Adding mongo dependency to the IoC container
-//   console.log('📕📕📕📕📕📕📕📕📕📕📕📕📕📕📕📕📕📕📕📕📕📕📕📕Registering Models dependencies')
-//   Container.set('PartnerModel', PartnerModel)
-//   Container.set('ServicesModel', ServiceModel)
-// }
-
 
 async function createServer() {
   const app = express()
@@ -50,13 +45,28 @@ async function createServer() {
   )
 }
 
+async function initializeDatabaseAndRunMigrations(logger: LoggerService) {
+  const initializedDB = await db.initialize()
+  logger.info('Databased initialized 🫡🫡🫡🫡🫡🫡🫡🫡🫡🫡', initializedDB)
+  await initializedDB.runMigrations()
+  logger.info('Migrations executed successfully 🫡🫡🫡🫡🫡🫡')
+  const tripRepository = db.getRepository(Trip).extend({
+    customDBFn() {
+      return 'test'
+    }
+  })
+  Container.set('TripRepository', tripRepository)
+}
+
 async function main() {
   try {
     // addDependencies()
     // await connectMongoDB()
+    const logger = Container.get<LoggerService>(LoggerService)
+    await initializeDatabaseAndRunMigrations(logger)
     await createServer()
   } catch (err: any) {
-    console.error(`Error: ${err.message}`)
+    console.error(`Error📛📛📛: ${err.message}`)
   }
 }
 
