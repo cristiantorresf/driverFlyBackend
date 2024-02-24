@@ -1,5 +1,6 @@
 import 'reflect-metadata'
 import express from 'express'
+import 'graphql-import-node'
 import * as http from 'http'
 import { ApolloServer } from '@apollo/server'
 import { typeDefs } from './gql/types'
@@ -15,6 +16,7 @@ import { Container } from 'typedi'
 import { LoggerService } from './services/LoggerService'
 import db from './db/db'
 import { Trip } from './db/entities/trip'
+
 
 dotenv.config()
 
@@ -74,6 +76,7 @@ async function main() {
   try {
     // addDependencies()
     // await connectMongoDB()
+   
     const logger = Container.get<LoggerService>(LoggerService)
     await initializeDatabaseAndRunMigrations(logger)
     await createServer()
