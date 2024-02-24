@@ -46,6 +46,7 @@ async function createServer() {
 }
 
 async function initializeDatabaseAndRunMigrations(logger: LoggerService) {
+  console.log('NODE ENV = ', process.env.NODE_ENV)
   try {
     if (process.env.NODE_ENV === 'development') {
       const initializedDB = await db.initialize()
