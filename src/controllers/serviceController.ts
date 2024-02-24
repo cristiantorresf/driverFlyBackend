@@ -61,9 +61,9 @@ export class ServiceController {
 
   async metaRegisterEvents(req: Request, res: Response) {
     this.log.info('😎😎😎🔥🔥 post webhook reached')
-
+    console.log('🔥🔥🔥🔥 Llego un msg de texto', JSON.stringify(req))
     this.log.info(JSON.stringify(req.body, null, 2))
-    if (req.body.object) {
+    if (req.body) {
       if (
         req.body.entry &&
         req.body.entry[0].changes &&
@@ -76,9 +76,9 @@ export class ServiceController {
         const msg_body = req.body.entry[0].changes[0].value.messages[0].text.body
 
         // Log the phone_number_id, from, and msg_body with emoticons
-        this.log.info(`📞 Phone Number ID: ${phone_number_id}`)
-        this.log.info(`📤 From: ${from}`)
-        this.log.info(`💬 Message Body: ${msg_body}`)
+        console.log(`📞 Phone Number ID: ${phone_number_id}`)
+        console.log(`📤 From: ${from}`)
+        console.log(`💬 Message Body: ${msg_body}`)
 
         axios({
           method: 'POST',
