@@ -62,6 +62,7 @@ export class ServiceController {
   async metaRegisterEvents(req: Request, res: Response) {
     this.log.info('😎😎😎🔥🔥 post webhook reached')
     console.log('🔥🔥🔥🔥 Llego un msg de texto')
+    console.log('req query', req.query)
     if (req.body) {
       if (
         req.body.entry &&
@@ -92,6 +93,7 @@ export class ServiceController {
       }
       res.sendStatus(200)
     } else {
+      console.log('no json payload body 🤨🤨🤨')
       res.sendStatus(404)
     }
   }
