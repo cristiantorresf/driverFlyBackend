@@ -48,7 +48,7 @@ export class ServiceController {
     const mode = req.query['hub.mode']
     const token = req.query['hub.verify_token']
     const challenge = req.query['hub.challenge']
-    this.log.info('🚀 test webhook data', { mode, token, challenge })
+    this.log.info('🚀 test webhook data', { mode, token, challenge, verifyToken })
     if (mode && token) {
       if (mode === 'subscribe' && token === verifyToken) {
         this.log.info('⭐️ WEBHOOK_VERIFIED')
