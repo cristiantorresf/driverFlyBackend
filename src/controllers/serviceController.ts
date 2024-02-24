@@ -43,14 +43,14 @@ export class ServiceController {
 
   async verifyWebhookWithMeta(req: Request, res: Response) {
     this.log.info('😎😎😎😎 get webhook reached')
-    const verify_token = process.env.VERIFY_TOKEN
+    const verifyToken = process.env.VERIFY_TOKEN
 
     const mode = req.query['hub.mode']
     const token = req.query['hub.verify_token']
     const challenge = req.query['hub.challenge']
-
+    this.log.info('🚀 test webhook data', { mode, token, challenge })
     if (mode && token) {
-      if (mode === 'subscribe' && token === verify_token) {
+      if (mode === 'subscribe' && token === verifyToken) {
         this.log.info('⭐️ WEBHOOK_VERIFIED')
         res.status(200).send(challenge)
       } else {
