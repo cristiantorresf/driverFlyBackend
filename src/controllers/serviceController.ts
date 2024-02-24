@@ -61,8 +61,7 @@ export class ServiceController {
 
   async metaRegisterEvents(req: Request, res: Response) {
     this.log.info('😎😎😎🔥🔥 post webhook reached')
-    console.log('🔥🔥🔥🔥 Llego un msg de texto', JSON.stringify(req))
-    this.log.info(JSON.stringify(req.body, null, 2))
+    console.log('🔥🔥🔥🔥 Llego un msg de texto')
     if (req.body) {
       if (
         req.body.entry &&
