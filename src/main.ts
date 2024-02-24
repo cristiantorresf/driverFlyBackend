@@ -30,7 +30,7 @@ async function createServer() {
     introspection: true
   })
   await server.start()
-
+  app.use(express.json())
   app.use('/api', cors(), routeController)
   // @ts-ignore
   app.use('/graphql', cors<cors.CorsRequest>(), json(), expressMiddleware(
