@@ -46,16 +46,27 @@ async function createServer() {
 }
 
 async function initializeDatabaseAndRunMigrations(logger: LoggerService) {
-  const initializedDB = await db.initialize()
-  logger.info('Databased initialized 🫡🫡🫡🫡🫡🫡🫡🫡🫡🫡', initializedDB)
-  await initializedDB.runMigrations()
-  logger.info('Migrations executed successfully 🫡🫡🫡🫡🫡🫡')
-  const tripRepository = db.getRepository(Trip).extend({
-    customDBFn() {
-      return 'test'
+  try {
+    if (process.env.NODE_ENV === 'development') {
+      const initializedDB = await db.initialize()
+      logger.info('Databased initialized 🫡🫡🫡🫡🫡🫡🫡🫡🫡🫡', initializedDB)
+      await initializedDB.runMigrations()
+      logger.info('Migrations executed successfully 🫡🫡🫡🫡🫡🫡')
+      const tripRepository = db.getRepository(Trip).extend({
+        customDBFn() {
+          return 'test'
+        }
+      })
+      Container.set('TripRepository', tripRepository)
+    } else {
+      logger.info('🚀🚀🚀 Skipped migrations since there is no database configuration in production')
+      return false
     }
-  })
-  Container.set('TripRepository', tripRepository)
+  } catch (e) {
+    logger.info('🔥 Unable to run database no database running on environment')
+    return false
+  }
+
 }
 
 async function main() {

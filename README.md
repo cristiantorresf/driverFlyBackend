@@ -73,3 +73,9 @@ const itemsToUpsert = [
 ```
 
 This is the best project in the world
+
+gcloud config configuration list
+gcloud config configurations create gcp-node
+gcloud config configurations activate default
+![img_2.png](img_2.png)
+
