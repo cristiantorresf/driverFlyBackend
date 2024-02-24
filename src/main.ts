@@ -41,8 +41,8 @@ async function createServer() {
 
   await new Promise<void>(() =>
     httpServer.listen({ port }, () => {
-      console.log(`🚀 Server ready at http://localhost:${port}/api`)
-      console.log(`🚀 GraphQl Server ready at http://localhost:${port}/graphql`)
+      console.log(`🚀 Server ready at https://${process.env.HOST}:${port}/api`)
+      console.log(`🚀 GraphQl Server ready at https://${process.env.HOST}:${port}/graphql`)
     })
   )
 }
@@ -76,7 +76,7 @@ async function main() {
   try {
     // addDependencies()
     // await connectMongoDB()
-   
+
     const logger = Container.get<LoggerService>(LoggerService)
     await initializeDatabaseAndRunMigrations(logger)
     await createServer()
