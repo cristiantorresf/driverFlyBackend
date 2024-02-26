@@ -27,7 +27,7 @@ async function createServer() {
     typeDefs,
     resolvers: {},
     plugins: [ApolloServerPluginDrainHttpServer({ httpServer }), SendTokenOverHeaders()],
-    introspection: true
+    introspection: process.env.NODE_ENV === 'development'
   })
   await server.start()
   app.use(express.json())
@@ -41,8 +41,9 @@ async function createServer() {
 
   await new Promise<void>(() =>
     httpServer.listen({ port }, () => {
-      console.log(`🚀 Server ready at https://${process.env.HOST}:${port}/api`)
-      console.log(`🚀 GraphQl Server ready at https://${process.env.HOST}:${port}/graphql`)
+      const url = process.env.NODE_ENV === 'development' ? `http://localhost/${port}` : `https://driverflybackend-production.up.railway.app`
+      console.log(`🚀 Server ready at ${url}/api`)
+      console.log(`🚀 GraphQl Server ready at ${url}/url`)
     })
   )
 }
