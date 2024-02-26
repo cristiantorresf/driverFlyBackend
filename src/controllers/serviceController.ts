@@ -3,6 +3,7 @@ import { Service } from 'typedi'
 import { ServicesAction } from '../actions/serviceAction'
 import axios from 'axios'
 import { LoggerService } from '../services/LoggerService'
+import util from 'util'
 
 @Service()
 export class ServiceController {
@@ -61,8 +62,13 @@ export class ServiceController {
 
   async metaRegisterEvents(req: Request, res: Response) {
     this.log.info('😎😎😎🔥🔥 post webhook reached')
-    console.log('🔥🔥🔥🔥 Llego un msg de texto')
-    console.log('req query', req.query)
+
+    try {
+      console.log('😇😇😇😇😇 req body', util.inspect(req.body, false, null, true))
+    } catch (error: any) {
+      console.log('Error printing request body', error)
+    }
+
     if (req.body) {
       if (
         req.body.entry &&
