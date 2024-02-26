@@ -60,47 +60,50 @@ export class ServiceController {
     }
   }
 
-  async metaRegisterEvents(req: Request, res: Response) {
+  async receivedWhatsappMessage(req: Request, res: Response) {
     this.log.info('😎😎😎🔥🔥 post webhook reached')
 
     try {
       console.log('😇😇😇😇😇 req body', util.inspect(req.body, false, null, true))
+      if (req.body) {
+        if (
+          req.body.entry &&
+          req.body.entry[0].changes &&
+          req.body.entry[0].changes[0] &&
+          req.body.entry[0].changes[0].value.messages &&
+          req.body.entry[0].changes[0].value.messages[0]
+        ) {
+          const phone_number_id = req.body.entry[0].changes[0].value.metadata.phone_number_id
+          const from = req.body.entry[0].changes[0].value.messages[0].from
+          const msg_body = req.body.entry[0].changes[0].value.messages[0].text.body
+
+          // Log the phone_number_id, from, and msg_body with emoticons
+          console.log(`📞 Phone Number ID: ${phone_number_id}`)
+          console.log(`📤 From: ${from}`)
+          console.log(`💬 Message Body: ${msg_body}`)
+
+          axios({
+            method: 'POST',
+            url: 'https://graph.facebook.com/v12.0/' + phone_number_id + '/messages?access_token=' + this.token,
+            data: {
+              messaging_product: 'whatsapp',
+              to: from,
+              text: { body: 'Ack: ' + msg_body }
+            },
+            headers: { 'Content-Type': 'application/json' }
+          })
+        }
+        res.sendStatus(200)
+      } else {
+        console.log('no json payload body 🤨🤨🤨')
+        res.sendStatus(404)
+      }
     } catch (error: any) {
       console.log('Error printing request body', error)
     }
-
-    if (req.body) {
-      if (
-        req.body.entry &&
-        req.body.entry[0].changes &&
-        req.body.entry[0].changes[0] &&
-        req.body.entry[0].changes[0].value.messages &&
-        req.body.entry[0].changes[0].value.messages[0]
-      ) {
-        const phone_number_id = req.body.entry[0].changes[0].value.metadata.phone_number_id
-        const from = req.body.entry[0].changes[0].value.messages[0].from
-        const msg_body = req.body.entry[0].changes[0].value.messages[0].text.body
-
-        // Log the phone_number_id, from, and msg_body with emoticons
-        console.log(`📞 Phone Number ID: ${phone_number_id}`)
-        console.log(`📤 From: ${from}`)
-        console.log(`💬 Message Body: ${msg_body}`)
-
-        axios({
-          method: 'POST',
-          url: 'https://graph.facebook.com/v12.0/' + phone_number_id + '/messages?access_token=' + this.token,
-          data: {
-            messaging_product: 'whatsapp',
-            to: from,
-            text: { body: 'Ack: ' + msg_body }
-          },
-          headers: { 'Content-Type': 'application/json' }
-        })
-      }
-      res.sendStatus(200)
-    } else {
-      console.log('no json payload body 🤨🤨🤨')
-      res.sendStatus(404)
-    }
+    console.log('🔥⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯🔥')
+    console.log('🔥⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯🔥')
+    console.log('🔥⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯🔥')
+    console.log('🔥⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯🔥')
   }
 }
