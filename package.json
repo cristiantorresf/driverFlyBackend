@@ -9,7 +9,7 @@
     "migration:create": "ts-node scripts/generate-migration.ts",
     "generateSchema": "ts-node scripts/generate-gql-schema.ts",
     "start": "node dist/src/main.js",
-    "dev": "npm run codegen && tsnd --respawn src/main.ts",
+    "dev": "export NODE_ENV=development npm run codegen && tsnd --respawn src/main.ts",
     "noop": "git commit --allow-empty --no-verify -m \"Trigger build\"\n",
     "test": "npm run test:unit",
     "test:unit": "NODE_ENV=test jest --coverage --verbose",
