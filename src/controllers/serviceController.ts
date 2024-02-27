@@ -40,6 +40,14 @@ const CUSTOMER_STATES: Record<States, States> = {
   RESTART: 'RESTART'
 }
 
+const TEMPLATES = {
+  START_TRIP: 'start_trip',
+  SEND_LOCATION: 'sendlocation',
+  SET_DESTINATION: 'setdestination',
+  CONFIRMATION: 'confirmation',
+  CANCELATION: 'cancellation'
+} as const
+
 interface UserState {
   language: Language
   state: States
@@ -77,7 +85,17 @@ export class ServiceController {
         ) {
           const phoneNumberId = body.entry[0].changes[0].value.metadata.phone_number_id
           const userPhoneNumber = body.entry[0].changes[0].value.messages[0].from
+          const entryMessage = body.entry[0].changes[0].value.messages[0]
           const userMessage = body.entry[0].changes[0].value.messages[0]?.text?.body
+          console.log('', { entryMessage })
+          if (entryMessage.type === 'interactive' && entryMessage?.interactive?.type === 'button_reply') {
+            // This means a button was clicked
+            const buttonId = entryMessage?.interactive.button_reply.id
+            const buttonTitle = entryMessage?.interactive.button_reply.title
+            console.log('buttonId, buttonTitle', { buttonId, buttonTitle })
+            // Now you can handle the button click based on the buttonId or buttonTitle
+          }
+
           console.log('Persistance States before ', this.userStates)
           console.log(`📞 Phone Number ID: ${phoneNumberId}`)
           console.log(`📤 From: ${userPhoneNumber}`)
@@ -99,6 +117,7 @@ export class ServiceController {
             const message = LanguageMessages[currentState.language].AWAITING_LOCATION
             await this.sendMessage(phoneNumberId, userPhoneNumber, `${userMessage} >> ${message}`, res)
             this.userStates.set(userPhoneNumber, currentState)
+            this.cancelTravelRequest()
             return
           }
 
@@ -202,6 +221,38 @@ export class ServiceController {
       } else {
         res.sendStatus(403)
       }
+    }
+  }
+
+  private cancelTravelRequest() {
+    this.userStates = new Map()
+  }
+
+  private async sendLanguageTemplate(phoneNumberId: string) {
+    try {
+      const response = await axios({
+        method: 'POST',
+        url: `https://graph.facebook.com/v12.0/${phoneNumberId}/messages`,
+        params: {
+          access_token: this.token
+        },
+        data: {
+          messaging_product: 'whatsapp',
+          to: '573237992985',
+          type: 'template',
+          template: {
+            name: 'start_trip',
+            language: {
+              code: 'en'
+            }
+          }
+        }
+      })
+
+      return response.data
+    } catch (error: any) {
+      console.error(`Failed to send message template: ${error.message}`)
+      throw error
     }
   }
 

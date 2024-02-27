@@ -60,13 +60,20 @@ interface Message {
   from: string
   id: string
   timestamp: string
-  type: 'location' | 'text'
+  type: 'location' | 'text' | 'interactive'
   text?: {
     body: string
   }
   location?: {
     latitude: number;
     longitude: number;
+  }
+  interactive?: {
+    type: string;
+    button_reply: {
+      id: string;
+      title: string;
+    }
   }
 }
 
