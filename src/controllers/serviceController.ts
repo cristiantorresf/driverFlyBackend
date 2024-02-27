@@ -77,6 +77,11 @@ export class ServiceController {
     this.userStates = new Map()
   }
 
+  async resetStatePersistence(_req: Request, res: Response) {
+    this.userStates = new Map()
+    res.sendStatus(200).send('Persistence state successfully reset')
+  }
+
   async receivedWhatsappMessage(req: Request, res: Response) {
     this.log.info('😎😎😎🔥🔥 post webhook reached')
     const body = req.body as WhatsAppMessageEntry
