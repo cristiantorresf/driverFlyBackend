@@ -274,14 +274,14 @@ export class ServiceController {
     }
   }
 
-  private async sendHelpNotification(currentState: UserState, phoneNumberId: string, userPhoneNumber: string, res: e.Response<any, Record<string, any>>) {
+  private async sendHelpNotification(currentState: UserState, phoneNumberId: string, userPhoneNumber: string, res: Response) {
     const botMessage = currentState.language === 'EN'
       ? `No worries, I can help you with your request. Send me a message at 3237992985 😊👍`
       : `No te preocupes, puedo ayudarte con tu solicitud. Envíame un mensaje al 3237992985 😊👍`
     await this.sendMessage(phoneNumberId, userPhoneNumber, botMessage, res)
   }
 
-  private async cancelationNotification(currentState: UserState, userPhoneNumber: string, res: e.Response<any, Record<string, any>>) {
+  private async cancelationNotification(currentState: UserState, userPhoneNumber: string, res: Response) {
     const cancelationMessage = currentState.language === 'EN'
       ? `Your request has been cancelled. Feel free to make a new one! ❌😉`
       : `Tu solicitud ha sido cancelada. ¡Siéntete libre de hacer una nueva! ❌😉`
@@ -302,7 +302,6 @@ export class ServiceController {
 
   private loggingEntryMessage(entryMessage: Message, phoneNumberId: string, userPhoneNumber: string, userMessage: string | undefined) {
     console.log('', { entryMessage })
-
     console.log('Persistance States before ', this.userStates)
     console.log(`📞 Phone Number ID: ${phoneNumberId}`)
     console.log(`📤 From: ${userPhoneNumber}`)
