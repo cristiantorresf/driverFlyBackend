@@ -225,8 +225,10 @@ export class ServiceController {
       if (response.status === 200)
         res.sendStatus(200)
     } catch (e) {
-      console.log('Unable to send message back to user')
+      console.log('🔥🙀🙀 Unable to send template back to user')
       res.sendStatus(404)
+      this.cancelTravelRequest(phoneNumberId)
+      await this.sendMessage(phoneNumberId, from, 'Something went wrong sending template', res)
     }
   }
 
@@ -328,8 +330,10 @@ export class ServiceController {
       if (response.status === 200)
         res.sendStatus(200)
     } catch (e) {
-      console.log('Unable to send message back to user')
+      console.log('🔥🔥🔥 Unable to send message back to user')
       res.sendStatus(404)
+      this.cancelTravelRequest(phoneNumberId)
+      throw new Error('Failed')
     }
 
   }
