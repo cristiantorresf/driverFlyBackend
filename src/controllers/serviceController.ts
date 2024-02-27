@@ -104,15 +104,13 @@ export class ServiceController {
           }
 
           if (buttonText && this.isHelpRequested(buttonText)) {
-            const botMessage = currentState.language === 'EN'
-              ? `No worries, I can help you with your request. Send me a message at 3237992985 😊👍`
-              : `No te preocupes, puedo ayudarte con tu solicitud. Envíame un mensaje al 3237992985 😊👍`
-            await this.sendMessage(phoneNumberId, userPhoneNumber, botMessage, res)
+            await this.sendHelpNotification(currentState, phoneNumberId, userPhoneNumber, res)
             return
           }
 
           if (buttonText && this.isCancellationRequested(buttonText) || userMessage === '5') {
             this.cancelTravelRequest(phoneNumberId)
+            await this.cancelationNotification(currentState, userPhoneNumber, res)
           }
 
           if (currentState.state === CUSTOMER_STATES.RESTART) {
@@ -274,6 +272,20 @@ export class ServiceController {
         res.sendStatus(403)
       }
     }
+  }
+
+  private async sendHelpNotification(currentState: UserState, phoneNumberId: string, userPhoneNumber: string, res: e.Response<any, Record<string, any>>) {
+    const botMessage = currentState.language === 'EN'
+      ? `No worries, I can help you with your request. Send me a message at 3237992985 😊👍`
+      : `No te preocupes, puedo ayudarte con tu solicitud. Envíame un mensaje al 3237992985 😊👍`
+    await this.sendMessage(phoneNumberId, userPhoneNumber, botMessage, res)
+  }
+
+  private async cancelationNotification(currentState: UserState, userPhoneNumber: string, res: e.Response<any, Record<string, any>>) {
+    const cancelationMessage = currentState.language === 'EN'
+      ? `Your request has been cancelled. Feel free to make a new one! ❌😉`
+      : `Tu solicitud ha sido cancelada. ¡Siéntete libre de hacer una nueva! ❌😉`
+    await this.sendMessage(userPhoneNumber, userPhoneNumber, cancelationMessage, res)
   }
 
   private isCancellationRequested(input: string): boolean {
