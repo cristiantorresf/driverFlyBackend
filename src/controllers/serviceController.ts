@@ -40,6 +40,7 @@ const CUSTOMER_STATES: Record<States, States> = {
   RESTART: 'RESTART'
 }
 
+/*
 const TEMPLATES = {
   START_TRIP: 'start_trip',
   SEND_LOCATION: 'sendlocation',
@@ -47,6 +48,7 @@ const TEMPLATES = {
   CONFIRMATION: 'confirmation',
   CANCELATION: 'cancellation'
 } as const
+*/
 
 interface UserState {
   language: Language
@@ -146,7 +148,7 @@ export class ServiceController {
               currentState.state = CUSTOMER_STATES.AWAITING_LOCATION
               break
             case CUSTOMER_STATES.AWAITING_LOCATION:
-              const messageLocation = body.entry[0].changes[0].value.messages[0].location
+              const messageLocation = entryMessage.location
               currentState.data.location = messageLocation
               stepResponseCalc = LanguageMessages[currentState.language].AWAITING_DESTINATION
               currentState.state = CUSTOMER_STATES.AWAITING_DESTINATION
