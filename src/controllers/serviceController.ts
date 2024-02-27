@@ -43,7 +43,7 @@ const CUSTOMER_STATES: Record<States, States> = {
 
 
 const TEMPLATES = {
-  SEND_LANGUAGE: 'start_trip',
+  SEND_LANGUAGE: 'strart_trip',
   SEND_LOCATION: 'sendlocation',
   SET_DESTINATION: 'setdestination',
   CONFIRMATION: 'confirmation',
