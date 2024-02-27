@@ -222,11 +222,11 @@ export class ServiceController {
         }
       }
       const response = await axios(requestBody)
-      if (response.status === 200)
-        res.sendStatus(200)
+      const statusCode = response.status === 200 ? 200 : 400
+      res.sendStatus(statusCode)
     } catch (e) {
       console.log('🔥🙀🙀 Unable to send template back to user')
-      res.sendStatus(404)
+
       this.cancelTravelRequest(phoneNumberId)
       await this.sendMessage(phoneNumberId, from, 'Something went wrong sending template', res)
     }
@@ -327,11 +327,10 @@ export class ServiceController {
         },
         headers: { 'Content-Type': 'application/json' }
       })
-      if (response.status === 200)
-        res.sendStatus(200)
+      const statusCode = response.status === 200 ? 200 : 400
+      res.sendStatus(statusCode)
     } catch (e) {
       console.log('🔥🔥🔥 Unable to send message back to user')
-      res.sendStatus(404)
       this.cancelTravelRequest(phoneNumberId)
       throw new Error('Failed')
     }
