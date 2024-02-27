@@ -3,6 +3,7 @@ import { Service } from 'typedi'
 import { ServicesAction } from '../actions/serviceAction'
 import axios from 'axios'
 import { LoggerService } from '../services/LoggerService'
+import { Message, TemplateComponent, WhatsAppMessageEntry } from '../types/whatsappApiTypes'
 
 type Language = 'EN' | 'ES'
 
@@ -40,15 +41,18 @@ const CUSTOMER_STATES: Record<States, States> = {
   RESTART: 'RESTART'
 }
 
-/*
+
 const TEMPLATES = {
-  START_TRIP: 'start_trip',
+  SEND_LANGUAGE: 'start_trip',
   SEND_LOCATION: 'sendlocation',
   SET_DESTINATION: 'setdestination',
   CONFIRMATION: 'confirmation',
   CANCELATION: 'cancellation'
 } as const
-*/
+
+type Template = typeof TEMPLATES[keyof typeof TEMPLATES]
+
+type PhoneNumber = string
 
 interface UserState {
   language: Language
@@ -63,7 +67,7 @@ interface UserState {
 @Service()
 export class ServiceController {
   token: string | undefined
-  private userStates: Map<string, UserState>
+  private userStates: Map<PhoneNumber, UserState>
 
   constructor(
     private servicesAction: ServicesAction,
@@ -89,28 +93,26 @@ export class ServiceController {
           const userPhoneNumber = body.entry[0].changes[0].value.messages[0].from
           const entryMessage = body.entry[0].changes[0].value.messages[0]
           const userMessage = body.entry[0].changes[0].value.messages[0]?.text?.body
-          console.log('', { entryMessage })
-          if (entryMessage.type === 'interactive' && entryMessage?.interactive?.type === 'button_reply') {
-            // This means a button was clicked
-            const buttonId = entryMessage?.interactive.button_reply.id
-            const buttonTitle = entryMessage?.interactive.button_reply.title
-            console.log('buttonId, buttonTitle', { buttonId, buttonTitle })
-            // Now you can handle the button click based on the buttonId or buttonTitle
-          }
+          const buttonText = entryMessage.type === 'button' ? entryMessage.button?.payload : ''
+          this.loggingEntryMessage(entryMessage, phoneNumberId, userPhoneNumber, userMessage)
 
-          console.log('Persistance States before ', this.userStates)
-          console.log(`📞 Phone Number ID: ${phoneNumberId}`)
-          console.log(`📤 From: ${userPhoneNumber}`)
-          console.log(`💬 Message Body: ${userMessage}`)
-          if (!userMessage) {
-            const messageLocation = body.entry[0].changes[0].value.messages[0].location
-            console.log('🌐 Location ', messageLocation)
-          }
-
+          // setting persistence with Map
           const currentState = this.userStates.get(userPhoneNumber) || {
             language: 'EN',
             state: CUSTOMER_STATES.FIRST_STEP,
             data: {}
+          }
+
+          if (buttonText && this.isHelpRequested(buttonText)) {
+            const botMessage = currentState.language === 'EN'
+              ? `No worries, I can help you with your request. Send me a message at 3237992985 😊👍`
+              : `No te preocupes, puedo ayudarte con tu solicitud. Envíame un mensaje al 3237992985 😊👍`
+            await this.sendMessage(phoneNumberId, userPhoneNumber, botMessage, res)
+            return
+          }
+
+          if (buttonText && this.isCancellationRequested(buttonText) || userMessage === '5') {
+            this.cancelTravelRequest(phoneNumberId)
           }
 
           if (currentState.state === CUSTOMER_STATES.RESTART) {
@@ -119,56 +121,73 @@ export class ServiceController {
             const message = LanguageMessages[currentState.language].AWAITING_LOCATION
             await this.sendMessage(phoneNumberId, userPhoneNumber, `${userMessage} >> ${message}`, res)
             this.userStates.set(userPhoneNumber, currentState)
-            this.cancelTravelRequest()
+            this.cancelTravelRequest(phoneNumberId)
             return
           }
 
           if (currentState.state === CUSTOMER_STATES.FIRST_STEP) {
+            // transition next step in the Chatbot
             currentState.state = CUSTOMER_STATES.AWAITING_LANGUAGE
-            const selectLanguageMsg = LanguageMessages.EN.AWAITING_LANGUAGE
-            await this.sendMessage(phoneNumberId, userPhoneNumber, selectLanguageMsg, res)
+            // we use nice templates instead of boring plain text messages
+            await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.SEND_LANGUAGE, res)
             this.userStates.set(userPhoneNumber, currentState)
             return
           }
           // Handle language selection separately
           if (currentState.state === CUSTOMER_STATES.AWAITING_LANGUAGE) {
-            const selectedLanguage = userMessage?.toUpperCase() === 'ES' ? 'ES' : 'EN'
-            const stepResponse = LanguageMessages[selectedLanguage].AWAITING_NAME
+            const selectedLanguage = buttonText?.toUpperCase() === 'ENGLISH' ? 'EN' : 'ES'
+            const botResponse = LanguageMessages[selectedLanguage].AWAITING_NAME
             currentState.language = selectedLanguage
+            // transition to ask name
             currentState.state = CUSTOMER_STATES.AWAITING_NAME
-            await this.sendMessage(phoneNumberId, userPhoneNumber, stepResponse, res)
+            await this.sendMessage(phoneNumberId, userPhoneNumber, botResponse, res)
             this.userStates.set(userPhoneNumber, currentState)
             return
           }
-          let stepResponseCalc = ''
           switch (currentState.state) {
             case CUSTOMER_STATES.AWAITING_NAME:
               currentState.data.name = userMessage
-              stepResponseCalc = LanguageMessages[currentState.language].AWAITING_LOCATION
+              // transition to ask location
               currentState.state = CUSTOMER_STATES.AWAITING_LOCATION
+              await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.SEND_LOCATION, res)
               break
             case CUSTOMER_STATES.AWAITING_LOCATION:
               const messageLocation = entryMessage.location
               currentState.data.location = messageLocation
-              stepResponseCalc = LanguageMessages[currentState.language].AWAITING_DESTINATION
               currentState.state = CUSTOMER_STATES.AWAITING_DESTINATION
+              await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.SET_DESTINATION, res)
               break
             case CUSTOMER_STATES.AWAITING_DESTINATION:
               currentState.data.destination = userMessage
-              const { destination, name, location } = currentState.data
-              stepResponseCalc = LanguageMessages[currentState.language].COMPLETED(name!, JSON.stringify(location), destination!)
+              const { destination, name } = currentState.data
+              const imageLink = 'https://th.bing.com/th/id/OIP.Y6o_MMWWe8Ze6EZrbqRZSAHaD9?rs=1&pid=ImgDetMain'
+              const templateInformation: TemplateComponent[] = [
+                {
+                  type: 'header',
+                  parameters: [
+                    { type: 'image', image: { link: imageLink } }
+                  ]
+                },
+                {
+                  type: 'body',
+                  parameters: [
+                    { type: 'text', text: name! },
+                    { type: 'text', text: destination! }
+
+                  ]
+                }
+              ]
               currentState.state = CUSTOMER_STATES.COMPLETED
+              await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.CONFIRMATION, res, templateInformation)
               break
             case CUSTOMER_STATES.COMPLETED:
               // restart
               if (userMessage === '5') {
-                stepResponseCalc = LanguageMessages[currentState.language].RESTART
                 currentState.state = CUSTOMER_STATES.RESTART
               }
               break
           }
           this.userStates.set(userPhoneNumber, currentState)
-          await this.sendMessage(phoneNumberId, userPhoneNumber, stepResponseCalc, res)
           console.log('Persistance States after ', this.userStates)
         }
         res.sendStatus(200)
@@ -180,6 +199,37 @@ export class ServiceController {
       console.log('Error printing request body', error)
     }
     console.log('🔥⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯🔥')
+  }
+
+  async sendTemplate(phoneNumberId: string, from: string, templateName: Template, res: Response, templateData?: TemplateComponent[]) {
+    try {
+      const requestBody = {
+        method: 'POST',
+        url: `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
+        data: {
+          messaging_product: 'whatsapp',
+          to: from,
+          type: 'template',
+          template: {
+            name: templateName,
+            language: {
+              code: 'en'
+            },
+            ...(templateName === TEMPLATES.CONFIRMATION ? { components: templateData } : {})
+          }
+        },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.token}`
+        }
+      }
+      const response = await axios(requestBody)
+      if (response.status === 200)
+        res.sendStatus(200)
+    } catch (e) {
+      console.log('Unable to send message back to user')
+      res.sendStatus(404)
+    }
   }
 
   public async getServices(req: Request, res: Response): Promise<Response> {
@@ -226,39 +276,32 @@ export class ServiceController {
     }
   }
 
-  private cancelTravelRequest() {
-    this.userStates = new Map()
+  private isCancellationRequested(input: string): boolean {
+    const cancelRepresentations = ['CANCELAR', 'CANCEL']
+    const upperCaseInput = input?.toUpperCase()
+    return cancelRepresentations.some(value => upperCaseInput?.includes(value))
+  }
+
+  private isHelpRequested(input: string): boolean {
+    const helpRepresentations = ['I NEED HELP', 'NECESITO AYUDA']
+    const upperCaseInput = input?.toUpperCase()
+    return helpRepresentations.some(token => upperCaseInput?.includes(token))
+  }
+
+  private loggingEntryMessage(entryMessage: Message, phoneNumberId: string, userPhoneNumber: string, userMessage: string | undefined) {
+    console.log('', { entryMessage })
+
+    console.log('Persistance States before ', this.userStates)
+    console.log(`📞 Phone Number ID: ${phoneNumberId}`)
+    console.log(`📤 From: ${userPhoneNumber}`)
+    console.log(`💬 Message Body: ${userMessage}`)
+  }
+
+  private cancelTravelRequest(userPhoneNumber: PhoneNumber) {
+    this.userStates.delete(userPhoneNumber)
   }
 
   // @ts-ignore
-  private async sendLanguageTemplate(phoneNumberId: string) {
-    try {
-      const response = await axios({
-        method: 'POST',
-        url: `https://graph.facebook.com/v12.0/${phoneNumberId}/messages`,
-        params: {
-          access_token: this.token
-        },
-        data: {
-          messaging_product: 'whatsapp',
-          to: '573237992985',
-          type: 'template',
-          template: {
-            name: 'start_trip',
-            language: {
-              code: 'en'
-            }
-          }
-        }
-      })
-
-      return response.data
-    } catch (error: any) {
-      console.error(`Failed to send message template: ${error.message}`)
-      throw error
-    }
-  }
-
   private async sendMessage(phoneNumberId: string, from: string, msgBody: any, res: Response) {
     try {
       const response = await axios({

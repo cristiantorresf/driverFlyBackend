@@ -1,4 +1,4 @@
-interface WhatsAppMessageEntry {
+export interface WhatsAppMessageEntry {
   object: string
   entry: Entry[]
 }
@@ -56,11 +56,11 @@ interface Pricing {
   category: string
 }
 
-interface Message {
+export interface Message {
   from: string
   id: string
   timestamp: string
-  type: 'location' | 'text' | 'interactive'
+  type: 'location' | 'text' | 'button'
   text?: {
     body: string
   }
@@ -68,24 +68,31 @@ interface Message {
     latitude: number;
     longitude: number;
   }
-  interactive?: {
-    type: string;
-    button_reply: {
-      id: string;
-      title: string;
-    }
+  button?: {
+    payload: string;
+    text: string;
   }
 }
 
-interface TextMessage extends Message {
-  text: {
-    body: string;
+export type TemplateComponent = {
+  type: string;
+  parameters: Parameter[];
+}
+
+type Parameter = {
+  type: string;
+} & (ImageParameter | TextParameter)
+
+interface ImageParameter {
+  type: 'image'
+  image: {
+    link: string;
   }
 }
 
-interface LocationMessage extends Message {
-  location: {
-    latitude: number;
-    longitude: number;
-  }
+interface TextParameter {
+  type: 'text'
+  text: string
 }
+
+
