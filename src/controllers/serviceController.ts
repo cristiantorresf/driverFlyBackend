@@ -230,6 +230,7 @@ export class ServiceController {
     this.userStates = new Map()
   }
 
+  // @ts-ignore
   private async sendLanguageTemplate(phoneNumberId: string) {
     try {
       const response = await axios({
