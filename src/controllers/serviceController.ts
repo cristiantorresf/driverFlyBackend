@@ -127,7 +127,7 @@ export class ServiceController {
             // transition next step in the Chatbot
             currentState.state = CUSTOMER_STATES.AWAITING_LANGUAGE
             // we use nice templates instead of boring plain text messages
-            await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.SEND_LANGUAGE, res)
+            await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.SEND_LANGUAGE, res, 'EN')
             this.userStates.set(userPhoneNumber, currentState)
             return
           }
@@ -142,18 +142,19 @@ export class ServiceController {
             this.userStates.set(userPhoneNumber, currentState)
             return
           }
+          const lang = currentState.language
           switch (currentState.state) {
             case CUSTOMER_STATES.AWAITING_NAME:
               currentState.data.name = userMessage
               // transition to ask location
               currentState.state = CUSTOMER_STATES.AWAITING_LOCATION
-              await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.SEND_LOCATION, res)
+              await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.SEND_LOCATION, res, lang)
               break
             case CUSTOMER_STATES.AWAITING_LOCATION:
               const messageLocation = entryMessage.location
               currentState.data.location = messageLocation
               currentState.state = CUSTOMER_STATES.AWAITING_DESTINATION
-              await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.SET_DESTINATION, res)
+              await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.SET_DESTINATION, res, lang)
               break
             case CUSTOMER_STATES.AWAITING_DESTINATION:
               currentState.data.destination = userMessage
@@ -176,7 +177,7 @@ export class ServiceController {
                 }
               ]
               currentState.state = CUSTOMER_STATES.COMPLETED
-              await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.CONFIRMATION, res, templateInformation)
+              await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.CONFIRMATION, res, lang, templateInformation)
               break
             case CUSTOMER_STATES.COMPLETED:
               // restart
@@ -199,7 +200,7 @@ export class ServiceController {
     console.log('🔥⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯🔥')
   }
 
-  async sendTemplate(phoneNumberId: string, from: string, templateName: Template, res: Response, templateData?: TemplateComponent[]) {
+  async sendTemplate(phoneNumberId: string, from: string, templateName: Template, res: Response, language: 'EN' | 'ES', templateData?: TemplateComponent[]) {
     try {
       const requestBody = {
         method: 'POST',
@@ -211,7 +212,7 @@ export class ServiceController {
           template: {
             name: templateName,
             language: {
-              code: 'en'
+              code: language
             },
             ...(templateName === TEMPLATES.CONFIRMATION ? { components: templateData } : {})
           }
@@ -224,9 +225,8 @@ export class ServiceController {
       const response = await axios(requestBody)
       const statusCode = response.status === 200 ? 200 : 400
       res.sendStatus(statusCode)
-    } catch (e) {
-      console.log('🔥🙀🙀 Unable to send template back to user')
-
+    } catch (e: any) {
+      console.log('🔥🙀🙀 Unable to send template back to user', e.message)
       this.cancelTravelRequest(phoneNumberId)
       await this.sendMessage(phoneNumberId, from, 'Something went wrong sending template', res)
     }
@@ -329,8 +329,8 @@ export class ServiceController {
       })
       const statusCode = response.status === 200 ? 200 : 400
       res.sendStatus(statusCode)
-    } catch (e) {
-      console.log('🔥🔥🔥 Unable to send message back to user')
+    } catch (e: any) {
+      console.log('🔥🔥🔥 Unable to send message back to user', e.message)
       this.cancelTravelRequest(phoneNumberId)
       throw new Error('Failed')
     }
