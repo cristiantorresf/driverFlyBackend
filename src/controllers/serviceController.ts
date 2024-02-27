@@ -14,8 +14,7 @@ const LanguageMessages = {
     AWAITING_NAME: 'What\'s your name and lastname?',
     AWAITING_LOCATION: 'Great! Now, please share your location by attaching it in WhatsApp.',
     AWAITING_DESTINATION: 'Almost there! Where would you like to go? Please share your destination address.',
-    COMPLETED: (name: string, location: string, destination: string) =>
-      `Thanks, ${name}! A dispatcher will send a car to ${location} to take you to ${destination} shortly. To cancel please send 5`,
+    COMPLETED: (name: string, location: string, destination: string) => `🙏 Thank you, ${name}! 🚗 A driver will send a car to ${location} to take you to ${destination} soon. 😊 To cancel please press 5. ⏹️`,
     RESTART: 'Your request has been canceled. Would you like to book another trip? If so, please share your name to start again.'
   },
   ES: {
@@ -24,8 +23,7 @@ const LanguageMessages = {
     AWAITING_NAME: '¿Cómo te llamas? Nombre y Apellido',
     AWAITING_LOCATION: '¡Genial! Ahora, por favor comparte tu ubicación adjuntándola en WhatsApp.',
     AWAITING_DESTINATION: 'Casi terminamos. ¿A dónde te gustaría ir? Por favor, comparte la dirección de tu destino.',
-    COMPLETED: (name: string, location: string, destination: string) =>
-      `Gracias, ${name}! Un conductor te enviará un auto a ${location} para llevarte a ${destination} pronto. Para cancelar por favor presiona 5`,
+    COMPLETED: (name: string, location: string, destination: string) => `🙏 Gracias, ${name}! 🚗 Un conductor te enviará un auto a ${location} para llevarte a ${destination} muy pronto. 😊 Para cancelar por favor presiona 5. ⏹️`,
     RESTART: 'Tu solicitud ha sido cancelada. ¿Te gustaría reservar otro viaje? Si es así, por favor comparte tu nombre para comenzar de nuevo.'
   }
 } as const
@@ -75,11 +73,13 @@ export class ServiceController {
   ) {
     this.token = process.env.WHATSAPP_TOKEN
     this.userStates = new Map()
+    console.log(this.userStates)
   }
 
   async resetStatePersistence(_req: Request, res: Response) {
     this.userStates = new Map()
-    res.sendStatus(200).send('Persistence state successfully reset')
+    console.log(this.userStates)
+    res.send('Persistence state successfully reset')
   }
 
   async receivedWhatsappMessage(req: Request, res: Response) {
@@ -110,21 +110,26 @@ export class ServiceController {
 
           if (buttonText && this.isHelpRequested(buttonText)) {
             await this.sendHelpNotification(currentState, phoneNumberId, userPhoneNumber, res)
+            res.sendStatus(200)
             return
           }
 
           if (buttonText && this.isCancellationRequested(buttonText) || userMessage === '5') {
             this.cancelTravelRequest(phoneNumberId)
-            await this.cancelationNotification(currentState, userPhoneNumber, res)
+            await this.cancelationNotification(phoneNumberId, currentState, userPhoneNumber, res)
+            currentState.state = CUSTOMER_STATES.FIRST_STEP
+            res.sendStatus(200)
+            return
           }
 
           if (currentState.state === CUSTOMER_STATES.RESTART) {
             currentState.data.name = userMessage
             currentState.state = CUSTOMER_STATES.AWAITING_LOCATION
             const message = LanguageMessages[currentState.language].AWAITING_LOCATION
-            await this.sendMessage(phoneNumberId, userPhoneNumber, `${userMessage} >> ${message}`, res)
+            await this.sendMessage(phoneNumberId, userPhoneNumber, `${userMessage} >> ${message}`)
             this.userStates.set(userPhoneNumber, currentState)
             this.cancelTravelRequest(phoneNumberId)
+            res.sendStatus(200)
             return
           }
 
@@ -134,6 +139,7 @@ export class ServiceController {
             // we use nice templates instead of boring plain text messages
             await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.SEND_LANGUAGE, res, 'EN')
             this.userStates.set(userPhoneNumber, currentState)
+            res.sendStatus(200)
             return
           }
           // Handle language selection separately
@@ -143,11 +149,13 @@ export class ServiceController {
             currentState.language = selectedLanguage
             // transition to ask name
             currentState.state = CUSTOMER_STATES.AWAITING_NAME
-            await this.sendMessage(phoneNumberId, userPhoneNumber, botResponse, res)
+            await this.sendMessage(phoneNumberId, userPhoneNumber, botResponse)
             this.userStates.set(userPhoneNumber, currentState)
+            res.sendStatus(200)
             return
           }
           const lang = currentState.language
+          const { name, location } = currentState.data
           switch (currentState.state) {
             case CUSTOMER_STATES.AWAITING_NAME:
               currentState.data.name = userMessage
@@ -163,7 +171,6 @@ export class ServiceController {
               break
             case CUSTOMER_STATES.AWAITING_DESTINATION:
               currentState.data.destination = userMessage
-              const { destination, name } = currentState.data
               const imageLink = 'https://th.bing.com/th/id/OIP.Y6o_MMWWe8Ze6EZrbqRZSAHaD9?rs=1&pid=ImgDetMain'
               const templateInformation: TemplateComponent[] = [
                 {
@@ -176,12 +183,14 @@ export class ServiceController {
                   type: 'body',
                   parameters: [
                     { type: 'text', text: name! },
-                    { type: 'text', text: destination! }
+                    { type: 'text', text: userMessage! }
 
                   ]
                 }
               ]
               currentState.state = CUSTOMER_STATES.COMPLETED
+              const msgBody = LanguageMessages[currentState.language].COMPLETED(name!, JSON.stringify(location), userMessage!)
+              await this.sendMessage(phoneNumberId, userPhoneNumber, msgBody)
               await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.CONFIRMATION, res, lang, templateInformation)
               break
             case CUSTOMER_STATES.COMPLETED:
@@ -192,13 +201,12 @@ export class ServiceController {
               break
           }
           this.userStates.set(userPhoneNumber, currentState)
-          console.log('Persistance States after ', this.userStates)
+          console.log('Persistance States after ', JSON.stringify(this.userStates))
         }
-        res.sendStatus(200)
       } else {
         console.log('no json payload body 🤨🤨🤨')
-        res.sendStatus(404)
       }
+      res.sendStatus(200)
     } catch (error: any) {
       console.log('Error printing request body', error)
     }
@@ -206,6 +214,7 @@ export class ServiceController {
   }
 
   async sendTemplate(phoneNumberId: string, from: string, templateName: Template, res: Response, language: 'EN' | 'ES', templateData?: TemplateComponent[]) {
+    console.log('Attempting to send template with ', { phoneNumberId, templateName, language, from, templateData })
     try {
       const requestBody = {
         method: 'POST',
@@ -227,13 +236,12 @@ export class ServiceController {
           Authorization: `Bearer ${this.token}`
         }
       }
-      const response = await axios(requestBody)
-      const statusCode = response.status === 200 ? 200 : 400
-      res.sendStatus(statusCode)
+      console.log({ requestBody: JSON.stringify(requestBody.data.template) })
+      await axios(requestBody)
     } catch (e: any) {
       console.log('🔥🙀🙀 Unable to send template back to user', e.message)
       this.cancelTravelRequest(phoneNumberId)
-      await this.sendMessage(phoneNumberId, from, 'Something went wrong sending template', res)
+      await this.sendMessage(phoneNumberId, from, 'Something went wrong sending template')
     }
   }
 
@@ -281,18 +289,70 @@ export class ServiceController {
     }
   }
 
+  async getUserStates(_req: Request, res: Response) {
+    let userStatesHTML = ''
+
+    // Loop over the Map entries and add them to the response string
+    for (const [userStateKey, userStateValue] of this.userStates.entries()) {
+      userStatesHTML += `<pre>User Key: ${userStateKey} => User Value: ${JSON.stringify(userStateValue, null, 2)}</pre>`
+    }
+
+    // The complete HTML response
+    const htmlResponse = `
+    <html lang='en'>
+      <head>
+        <title>User States</title>
+        <style>
+          body{
+            background-color: #242424; /* Dark background */
+          }
+
+          pre{
+            color: lime; /* Green text */
+          }
+          #refreshBtn {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 10px;
+        font-size: 1em;
+        background-color: lime;
+        color: black;
+        border: none;
+        cursor: pointer;
+        border-radius: 5px;
+        box-shadow: 0 0 8px rgba(0,0,0,0.1);
+      }
+
+      #refreshBtn:hover {
+        background-color: #bada55;
+        box-shadow: 0 0 16px rgba(0,0,0,0.2);
+      }
+        </style>
+      </head>
+      <body>
+        <h2 style='color:white;'>User States:</h2>
+        ${userStatesHTML}
+        <button id='refreshBtn' onclick='location.reload();'>Refresh</button>
+      </body>
+    </html>`
+
+    // Send HTML response
+    res.send(htmlResponse)
+  }
+
   private async sendHelpNotification(currentState: UserState, phoneNumberId: string, userPhoneNumber: string, res: Response) {
     const botMessage = currentState.language === 'EN'
       ? `No worries, I can help you with your request. Send me a message at 3237992985 😊👍`
       : `No te preocupes, puedo ayudarte con tu solicitud. Envíame un mensaje al 3237992985 😊👍`
-    await this.sendMessage(phoneNumberId, userPhoneNumber, botMessage, res)
+    await this.sendMessage(phoneNumberId, userPhoneNumber, botMessage)
   }
 
-  private async cancelationNotification(currentState: UserState, userPhoneNumber: string, res: Response) {
+  private async cancelationNotification(phoneNumberId: string, currentState: UserState, userPhoneNumber: string, res: Response) {
     const cancelationMessage = currentState.language === 'EN'
       ? `Your request has been cancelled. Feel free to make a new one! ❌😉`
       : `Tu solicitud ha sido cancelada. ¡Siéntete libre de hacer una nueva! ❌😉`
-    await this.sendMessage(userPhoneNumber, userPhoneNumber, cancelationMessage, res)
+    await this.sendMessage(phoneNumberId, userPhoneNumber, cancelationMessage)
   }
 
   private isCancellationRequested(input: string): boolean {
@@ -320,9 +380,10 @@ export class ServiceController {
   }
 
   // @ts-ignore
-  private async sendMessage(phoneNumberId: string, from: string, msgBody: any, res: Response) {
+  private async sendMessage(phoneNumberId: string, from: string, msgBody: any) {
+    console.log(`Attempting to send message with ${msgBody} with numberId ${phoneNumberId} and user number ${from}`)
     try {
-      const response = await axios({
+      await axios({
         method: 'POST',
         url: 'https://graph.facebook.com/v12.0/' + phoneNumberId + '/messages?access_token=' + this.token,
         data: {
@@ -332,8 +393,9 @@ export class ServiceController {
         },
         headers: { 'Content-Type': 'application/json' }
       })
-      const statusCode = response.status === 200 ? 200 : 400
-      res.sendStatus(statusCode)
+      console.log('Message send successfully')
+      // const statusCode = response.status === 200 ? 200 : 400
+      // res.sendStatus(statusCode)
     } catch (e: any) {
       console.log('🔥🔥🔥 Unable to send message back to user', e.message)
       this.cancelTravelRequest(phoneNumberId)
