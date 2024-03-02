@@ -16,6 +16,7 @@ import { Container } from 'typedi'
 import { LoggerService } from './services/LoggerService'
 import db from './db/db'
 import { Trip } from './db/entities/trip'
+import { DatabaseRespositories } from './utils/databaseUtils'
 
 
 dotenv.config()
@@ -62,13 +63,13 @@ async function initializeDatabaseAndRunMigrations(logger: LoggerService) {
           return 'test'
         }
       })
-      Container.set('TripRepository', tripRepository)
+      Container.set(DatabaseRespositories.tripRepository, tripRepository)
     } else {
       logger.info('🚀🚀🚀 Skipped migrations since there is no database configuration in production')
       return false
     }
-  } catch (e) {
-    logger.info('🔥 Unable to run database no database running on environment')
+  } catch (e: any) {
+    logger.error('🔥 Unable to run database no database running on environment', e)
     return false
   }
 

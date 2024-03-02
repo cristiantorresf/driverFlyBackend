@@ -4,6 +4,7 @@ import { ServicesAction } from '../actions/serviceAction'
 import axios from 'axios'
 import { LoggerService } from '../services/LoggerService'
 import { Message, TemplateComponent, WhatsAppMessageEntry } from '../types/whatsappApiTypes'
+import { TripRepository } from '../repositories/TripRepository'
 
 type Language = 'EN' | 'ES'
 
@@ -15,7 +16,8 @@ const LanguageMessages = {
     AWAITING_LOCATION: 'Great! Now, please share your location by attaching it in WhatsApp.',
     AWAITING_DESTINATION: 'Almost there! Where would you like to go? Please share your destination address.',
     COMPLETED: (name: string, location: string, destination: string) => `🙏 Thank you, ${name}! 🚗 A driver will send a car to ${location} to take you to ${destination} soon. 😊 To cancel please press 5. ⏹️`,
-    RESTART: 'Your request has been canceled. Would you like to book another trip? If so, please share your name to start again.'
+    RESTART: 'Your request has been canceled. Would you like to book another trip? If so, please share your name to start again.',
+    AWAITING_DISPATCHER: 'AWAITING_DISPATCHER'
   },
   ES: {
     FIRST_STEP: 'BIENVENIDO',
@@ -24,7 +26,8 @@ const LanguageMessages = {
     AWAITING_LOCATION: '¡Genial! Ahora, por favor comparte tu ubicación adjuntándola en WhatsApp.',
     AWAITING_DESTINATION: 'Casi terminamos. ¿A dónde te gustaría ir? Por favor, comparte la dirección de tu destino.',
     COMPLETED: (name: string, location: string, destination: string) => `🙏 Gracias, ${name}! 🚗 Un conductor te enviará un auto a ${location} para llevarte a ${destination} muy pronto. 😊 Para cancelar por favor presiona 5. ⏹️`,
-    RESTART: 'Tu solicitud ha sido cancelada. ¿Te gustaría reservar otro viaje? Si es así, por favor comparte tu nombre para comenzar de nuevo.'
+    RESTART: 'Tu solicitud ha sido cancelada. ¿Te gustaría reservar otro viaje? Si es así, por favor comparte tu nombre para comenzar de nuevo.',
+    AWAITING_DISPATCHER: 'AWAITING_DISPATCHER'
   }
 } as const
 
@@ -36,7 +39,8 @@ const CUSTOMER_STATES: Record<States, States> = {
   AWAITING_LOCATION: 'AWAITING_LOCATION',
   AWAITING_DESTINATION: 'AWAITING_DESTINATION',
   COMPLETED: 'COMPLETED',
-  RESTART: 'RESTART'
+  RESTART: 'RESTART',
+  AWAITING_DISPATCHER: 'AWAITING_DISPATCHER'
 }
 
 
@@ -45,7 +49,11 @@ const TEMPLATES = {
   SEND_LOCATION: 'sendlocation',
   SET_DESTINATION: 'setdestination',
   CONFIRMATION: 'confirmation',
-  CANCELATION: 'cancellation'
+  CANCELATION: 'cancellation',
+  NO_LOCATION: 'nolocation',
+  IN_PROGRESS: 'tripprogress',
+  ENGAGEMENT: 'engagement',
+  INTRODUCTION: 'introduction'
 } as const
 
 type Template = typeof TEMPLATES[keyof typeof TEMPLATES]
@@ -59,6 +67,7 @@ interface UserState {
     name?: string
     location?: { latitude: number, longitude: number }
     destination?: string
+    sentProgressWarn?: boolean
   }
 }
 
@@ -66,10 +75,12 @@ interface UserState {
 export class ServiceController {
   token: string | undefined
   private userStates: Map<PhoneNumber, UserState>
+  private response: Response | undefined
 
   constructor(
     private servicesAction: ServicesAction,
-    private log: LoggerService
+    private log: LoggerService,
+    private tripRepository: TripRepository
   ) {
     this.token = process.env.WHATSAPP_TOKEN
     this.userStates = new Map()
@@ -82,130 +93,124 @@ export class ServiceController {
     res.send('Persistence state successfully reset')
   }
 
+  async handleButtonActions(buttonText: string, userMessage: string, phoneNumberId: string, currentState: UserState, userPhoneNumber: string): Promise<boolean> {
+    if (buttonText && this.isHelpRequested(buttonText)) {
+      await this.sendHelpNotification(currentState, phoneNumberId, userPhoneNumber)
+      return true
+    }
+
+    if ((buttonText && this.isCancellationRequested(buttonText)) || userMessage === '5') {
+      this.cancelTravelRequest(phoneNumberId)
+      await this.cancelationNotification(phoneNumberId, currentState, userPhoneNumber)
+      currentState.state = CUSTOMER_STATES.FIRST_STEP
+      return true
+    }
+
+    return false
+  }
+
+  async handleUserDidntSendLocation(userPhoneNumber: string, phoneNumberId: string, language: Language) {
+    const templateName = TEMPLATES.NO_LOCATION
+    const imageLink = 'https://th.bing.com/th/id/R.93225084a602b89bdb9dfce21e9aa21a?rik=TSk94dnio%2fU6Qw&riu=http%3a%2f%2fcdn.techgyd.com%2fsend-your-location-with-WhatsApp.jpg&ehk=P%2bGMn9aaNfdmaFh32TKeZsAwcXVZfw8ejRn%2f%2fy1U3%2bc%3d&risl=&pid=ImgRaw&r=0&sres=1&sresct=1'
+    const templateData: TemplateComponent[] = [
+      {
+        type: 'header',
+        parameters: [
+          {
+            type: 'image', image: { link: imageLink }
+          }
+        ]
+      }
+    ]
+    await this.sendTemplate(phoneNumberId, userPhoneNumber, templateName, language, templateData)
+    return true
+  }
+
   async receivedWhatsappMessage(req: Request, res: Response) {
+    this.response = res
     this.log.info('😎😎😎🔥🔥 post webhook reached')
     const body = req.body as WhatsAppMessageEntry
+    const { entry } = body
+    if (!entry) return res.sendStatus(400)
+    const { metadata: { phone_number_id: phoneNumberId }, messages } = entry[0].changes[0].value
+    const [entryMessage] = messages!
+    if (!entryMessage || !phoneNumberId) {
+      console.log('no json payload body 🤨🤨🤨')
+      return res.sendStatus(400)
+    }
     try {
-      if (body) {
-        if (
-          body.entry &&
-          body.entry[0].changes &&
-          body.entry[0].changes[0] &&
-          body.entry[0].changes[0].value.messages &&
-          body.entry[0].changes[0].value.messages[0]
-        ) {
-          const phoneNumberId = body.entry[0].changes[0].value.metadata.phone_number_id
-          const userPhoneNumber = body.entry[0].changes[0].value.messages[0].from
-          const entryMessage = body.entry[0].changes[0].value.messages[0]
-          const userMessage = body.entry[0].changes[0].value.messages[0]?.text?.body
-          const buttonText = entryMessage.type === 'button' ? entryMessage.button?.payload : ''
-          this.loggingEntryMessage(entryMessage, phoneNumberId, userPhoneNumber, userMessage)
-
-          // setting persistence with Map
-          const currentState = this.userStates.get(userPhoneNumber) || {
-            language: 'EN',
-            state: CUSTOMER_STATES.FIRST_STEP,
-            data: {}
-          }
-
-          if (buttonText && this.isHelpRequested(buttonText)) {
-            await this.sendHelpNotification(currentState, phoneNumberId, userPhoneNumber, res)
-            res.sendStatus(200)
-            return
-          }
-
-          if (buttonText && this.isCancellationRequested(buttonText) || userMessage === '5') {
-            this.cancelTravelRequest(phoneNumberId)
-            await this.cancelationNotification(phoneNumberId, currentState, userPhoneNumber, res)
-            currentState.state = CUSTOMER_STATES.FIRST_STEP
-            res.sendStatus(200)
-            return
-          }
-
-          if (currentState.state === CUSTOMER_STATES.RESTART) {
-            currentState.data.name = userMessage
-            currentState.state = CUSTOMER_STATES.AWAITING_LOCATION
-            const message = LanguageMessages[currentState.language].AWAITING_LOCATION
-            await this.sendMessage(phoneNumberId, userPhoneNumber, `${userMessage} >> ${message}`)
-            this.userStates.set(userPhoneNumber, currentState)
-            this.cancelTravelRequest(phoneNumberId)
-            res.sendStatus(200)
-            return
-          }
-
-          if (currentState.state === CUSTOMER_STATES.FIRST_STEP) {
-            // transition next step in the Chatbot
-            currentState.state = CUSTOMER_STATES.AWAITING_LANGUAGE
-            // we use nice templates instead of boring plain text messages
-            await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.SEND_LANGUAGE, res, 'EN')
-            this.userStates.set(userPhoneNumber, currentState)
-            res.sendStatus(200)
-            return
-          }
-          // Handle language selection separately
-          if (currentState.state === CUSTOMER_STATES.AWAITING_LANGUAGE) {
-            const selectedLanguage = buttonText?.toUpperCase() === 'ENGLISH' ? 'EN' : 'ES'
-            const botResponse = LanguageMessages[selectedLanguage].AWAITING_NAME
-            currentState.language = selectedLanguage
-            // transition to ask name
-            currentState.state = CUSTOMER_STATES.AWAITING_NAME
-            await this.sendMessage(phoneNumberId, userPhoneNumber, botResponse)
-            this.userStates.set(userPhoneNumber, currentState)
-            res.sendStatus(200)
-            return
-          }
-          const lang = currentState.language
-          const { name, location } = currentState.data
-          switch (currentState.state) {
-            case CUSTOMER_STATES.AWAITING_NAME:
-              currentState.data.name = userMessage
-              // transition to ask location
-              currentState.state = CUSTOMER_STATES.AWAITING_LOCATION
-              await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.SEND_LOCATION, res, lang)
-              break
-            case CUSTOMER_STATES.AWAITING_LOCATION:
-              const messageLocation = entryMessage.location
-              currentState.data.location = messageLocation
-              currentState.state = CUSTOMER_STATES.AWAITING_DESTINATION
-              await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.SET_DESTINATION, res, lang)
-              break
-            case CUSTOMER_STATES.AWAITING_DESTINATION:
-              currentState.data.destination = userMessage
-              const imageLink = 'https://th.bing.com/th/id/OIP.Y6o_MMWWe8Ze6EZrbqRZSAHaD9?rs=1&pid=ImgDetMain'
-              const templateInformation: TemplateComponent[] = [
-                {
-                  type: 'header',
-                  parameters: [
-                    { type: 'image', image: { link: imageLink } }
-                  ]
-                },
-                {
-                  type: 'body',
-                  parameters: [
-                    { type: 'text', text: name! },
-                    { type: 'text', text: userMessage! }
-
-                  ]
-                }
-              ]
-              currentState.state = CUSTOMER_STATES.COMPLETED
-              const msgBody = LanguageMessages[currentState.language].COMPLETED(name!, JSON.stringify(location), userMessage!)
-              await this.sendMessage(phoneNumberId, userPhoneNumber, msgBody)
-              await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.CONFIRMATION, res, lang, templateInformation)
-              break
-            case CUSTOMER_STATES.COMPLETED:
-              // restart
-              if (userMessage === '5') {
-                currentState.state = CUSTOMER_STATES.RESTART
-              }
-              break
-          }
-          this.userStates.set(userPhoneNumber, currentState)
-          console.log('Persistance States after ', JSON.stringify(this.userStates))
-        }
-      } else {
-        console.log('no json payload body 🤨🤨🤨')
+      const { from: userPhoneNumber, text } = entryMessage
+      const userMessage = text?.body
+      const buttonText = entryMessage.type === 'button' ? entryMessage.button?.payload : ''
+      this.loggingEntryMessage(entryMessage, phoneNumberId, userPhoneNumber, userMessage)
+      // Handle user state
+      const currentState = this.userStates.get(userPhoneNumber) || {
+        language: 'EN',
+        state: CUSTOMER_STATES.FIRST_STEP,
+        data: {}
       }
+
+      if (currentState.state === CUSTOMER_STATES.AWAITING_DISPATCHER && currentState.data.sentProgressWarn) {
+        if (this.okProgressTrip(buttonText!)) {
+          const msgBody = 'ok'
+          await this.sendMessage(phoneNumberId, userPhoneNumber, msgBody)
+        }
+        if (this.isCancelProgressedTrip(buttonText!)) {
+          const msgBody = currentState.language === 'EN' ? 'You have cancel your trip' : 'Has cancelado el viaje'
+          // delete the right way
+          this.userStates.delete(userPhoneNumber)
+          await this.sendMessage(phoneNumberId, userPhoneNumber, msgBody)
+        }
+        return res.sendStatus(200)
+      }
+      if (currentState.state === CUSTOMER_STATES.AWAITING_DISPATCHER) {
+        const templateName = TEMPLATES.IN_PROGRESS
+        await this.sendTemplate(phoneNumberId, userPhoneNumber, templateName, currentState.language)
+        currentState.data.sentProgressWarn = true
+        this.userStates.set(userPhoneNumber, currentState)
+        return
+      }
+      if (currentState.state === CUSTOMER_STATES.COMPLETED) {
+        const templateName = TEMPLATES.IN_PROGRESS
+        await this.sendTemplate(phoneNumberId, userPhoneNumber, templateName, currentState.language)
+        currentState.data.sentProgressWarn = true
+        this.userStates.set(userPhoneNumber, currentState)
+        return
+      }
+      if (await this.handleButtonActions(buttonText!, userMessage!, phoneNumberId, currentState, userPhoneNumber)) {
+        if (this.response) this.response.sendStatus(200)
+        return
+      }
+
+      if (currentState.state === CUSTOMER_STATES.RESTART) {
+        await this.handleUserRestart(currentState, userMessage!, phoneNumberId, userPhoneNumber)
+        return
+      }
+      console.log('buttonText', { buttonText })
+      if (this.startSessionRequested(buttonText!) && currentState.state === CUSTOMER_STATES.FIRST_STEP) {
+        await this.handleFirstStep(currentState, phoneNumberId, userPhoneNumber)
+        return
+      }
+      if (currentState.state === CUSTOMER_STATES.FIRST_STEP && !this.startSessionRequested(buttonText!)) {
+        const language = userPhoneNumber.startsWith('1') ? 'EN' : (userPhoneNumber.startsWith('57') ? 'ES' : undefined)
+        console.log('language', { language, userPhoneNumber })
+        if (!language) {
+          console.log('Country not supported')
+          return
+        }
+        await this.sendIntroductionTemplate(phoneNumberId, userPhoneNumber, language)
+        return
+      }
+      // Handle language selection separately
+      if (currentState.state === CUSTOMER_STATES.AWAITING_LANGUAGE) {
+        await this.handleChangeLanguageState(buttonText!, currentState, phoneNumberId, userPhoneNumber)
+        return
+      }
+      const lang = currentState.language
+      const { name, location } = currentState.data
+      await this.handleWhatsappFlow(currentState, userMessage!, phoneNumberId, userPhoneNumber, lang, entryMessage, name!, location)
+      this.userStates.set(userPhoneNumber, currentState)
+      console.log('Persistance States after ', JSON.stringify(this.userStates))
       res.sendStatus(200)
     } catch (error: any) {
       console.log('Error printing request body', error)
@@ -213,7 +218,7 @@ export class ServiceController {
     console.log('🔥⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯🔥')
   }
 
-  async sendTemplate(phoneNumberId: string, from: string, templateName: Template, res: Response, language: 'EN' | 'ES', templateData?: TemplateComponent[]) {
+  async sendTemplate(phoneNumberId: string, from: string, templateName: Template, language: 'EN' | 'ES', templateData?: TemplateComponent[]) {
     console.log('Attempting to send template with ', { phoneNumberId, templateName, language, from, templateData })
     try {
       const requestBody = {
@@ -228,7 +233,8 @@ export class ServiceController {
             language: {
               code: language
             },
-            ...(templateName === TEMPLATES.CONFIRMATION ? { components: templateData } : {})
+            ...(templateName === TEMPLATES.CONFIRMATION ? { components: templateData } : {}),
+            ...(templateName ? { components: templateData } : {})
           }
         },
         headers: {
@@ -236,7 +242,7 @@ export class ServiceController {
           Authorization: `Bearer ${this.token}`
         }
       }
-      console.log({ requestBody: JSON.stringify(requestBody.data.template) })
+      console.log(requestBody)
       await axios(requestBody)
     } catch (e: any) {
       console.log('🔥🙀🙀 Unable to send template back to user', e.message)
@@ -286,6 +292,27 @@ export class ServiceController {
       } else {
         res.sendStatus(403)
       }
+    }
+  }
+
+  async addRecordToDatabase(currentState: UserState, userPhoneNumber: string) {
+    console.log(`Attempting to add record to DB with ${JSON.stringify(currentState)} and phone ${userPhoneNumber}`)
+    try {
+      if (this.tripRepository) {
+        console.log('repository good 🫡')
+        this.tripRepository.transaction.save({
+          fullName: currentState.data.name,
+          status: currentState.state as any,
+          phoneNumber: userPhoneNumber,
+          destinationLocation: currentState.data.destination,
+          pickupLocation: JSON.stringify(currentState.data.location)
+        }).catch(e => console.log(JSON.stringify(e)))
+      } else {
+        console.log('repository not good 🤯')
+
+      }
+    } catch (e: any) {
+      console.log('Unable to add record to the database', e.message)
     }
   }
 
@@ -341,14 +368,121 @@ export class ServiceController {
     res.send(htmlResponse)
   }
 
-  private async sendHelpNotification(currentState: UserState, phoneNumberId: string, userPhoneNumber: string, res: Response) {
+  // @ts-ignore
+  private async sendEngagementTemplate(phoneId, userPhone, language) {
+    const templateName: TemplateComponent[] = [
+      {
+        type: 'header',
+        parameters: [{
+          type: 'image',
+          image: { link: 'https://th.bing.com/th/id/OIP.AFNUFYbvuwg9Sh5yZJ_aBQHaED?w=304&h=180&c=7&r=0&o=5&dpr=2.2&pid=1.7' }
+        }]
+
+      }
+    ]
+    await this.sendTemplate(phoneId, userPhone, TEMPLATES.ENGAGEMENT, language, templateName)
+    if (this.response) this.response.sendStatus(200)
+  }
+
+  private async sendIntroductionTemplate(phoneId: string, userPhone: string, language: Language) {
+    await this.sendTemplate(phoneId, userPhone, TEMPLATES.INTRODUCTION, language)
+    if (this.response) this.response.sendStatus(200)
+  }
+
+  private async handleWhatsappFlow(currentState: UserState, userMessage: string, phoneNumberId: string, userPhoneNumber: string, lang: Language, entryMessage: Message, name: string, location: Message['location']) {
+    switch (currentState.state) {
+      case CUSTOMER_STATES.AWAITING_NAME:
+        currentState.data.name = userMessage
+        // transition to ask location
+        currentState.state = CUSTOMER_STATES.AWAITING_LOCATION
+        await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.SEND_LOCATION, lang)
+        break
+      case CUSTOMER_STATES.AWAITING_LOCATION:
+        const messageLocation = entryMessage.location
+        if (!messageLocation) {
+          await this.handleUserDidntSendLocation(userPhoneNumber, phoneNumberId, currentState.language)
+          currentState.state = CUSTOMER_STATES.AWAITING_LOCATION
+          break
+        }
+        currentState.data.location = messageLocation
+        currentState.state = CUSTOMER_STATES.AWAITING_DESTINATION
+        await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.SET_DESTINATION, lang)
+        break
+      case CUSTOMER_STATES.AWAITING_DESTINATION:
+        currentState.data.destination = userMessage
+        const imageLink = 'https://th.bing.com/th/id/OIP.2mNmmW7iIdlsCRqxKKUq0QHaI4?rs=1&pid=ImgDetMain'
+        const templateInformation: TemplateComponent[] = [
+          {
+            type: 'header',
+            parameters: [
+              { type: 'image', image: { link: imageLink } }
+            ]
+          },
+          {
+            type: 'body',
+            parameters: [
+              { type: 'text', text: name! },
+              { type: 'text', text: userMessage! }
+
+            ]
+          }
+        ]
+        currentState.state = CUSTOMER_STATES.COMPLETED
+        const msgBody = LanguageMessages[currentState.language].COMPLETED(name!, JSON.stringify(location), userMessage!)
+        await this.sendMessage(phoneNumberId, userPhoneNumber, msgBody)
+        await this.addRecordToDatabase(currentState, userPhoneNumber)
+        await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.CONFIRMATION, lang, templateInformation)
+        break
+      case CUSTOMER_STATES.COMPLETED:
+        // restart
+        if (userMessage === '5') {
+          currentState.state = CUSTOMER_STATES.RESTART
+          break
+        }
+        currentState.state = CUSTOMER_STATES.AWAITING_DISPATCHER
+        // save to database and create frontend
+        break
+    }
+  }
+
+  private async handleFirstStep(currentState: UserState, phoneNumberId: string, userPhoneNumber: string) {
+    currentState.state = CUSTOMER_STATES.AWAITING_LANGUAGE
+    await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.SEND_LANGUAGE, 'EN')
+    this.userStates.set(userPhoneNumber, currentState)
+    if (this.response) this.response.sendStatus(200)
+    return
+  }
+
+  private async handleChangeLanguageState(buttonText: string, currentState: UserState, phoneNumberId: string, userPhoneNumber: string) {
+    const selectedLanguage = buttonText?.toUpperCase() === 'ENGLISH' ? 'EN' : 'ES'
+    const botResponse = LanguageMessages[selectedLanguage].AWAITING_NAME
+    currentState.language = selectedLanguage
+    currentState.state = CUSTOMER_STATES.AWAITING_NAME
+    await this.sendMessage(phoneNumberId, userPhoneNumber, botResponse)
+    this.userStates.set(userPhoneNumber, currentState)
+    if (this.response) this.response.sendStatus(200)
+    return
+  }
+
+  private async handleUserRestart(currentState: UserState, userMessage: string, phoneNumberId: string, userPhoneNumber: string) {
+    currentState.data.name = userMessage
+    currentState.state = CUSTOMER_STATES.AWAITING_LOCATION
+    const message = LanguageMessages[currentState.language].AWAITING_LOCATION
+    await this.sendMessage(phoneNumberId, userPhoneNumber, `${userMessage} >> ${message}`)
+    this.userStates.set(userPhoneNumber, currentState)
+    this.cancelTravelRequest(phoneNumberId)
+    if (this.response) this.response.sendStatus(200)
+    return
+  }
+
+  private async sendHelpNotification(currentState: UserState, phoneNumberId: string, userPhoneNumber: string) {
     const botMessage = currentState.language === 'EN'
       ? `No worries, I can help you with your request. Send me a message at 3237992985 😊👍`
       : `No te preocupes, puedo ayudarte con tu solicitud. Envíame un mensaje al 3237992985 😊👍`
     await this.sendMessage(phoneNumberId, userPhoneNumber, botMessage)
   }
 
-  private async cancelationNotification(phoneNumberId: string, currentState: UserState, userPhoneNumber: string, res: Response) {
+  private async cancelationNotification(phoneNumberId: string, currentState: UserState, userPhoneNumber: string) {
     const cancelationMessage = currentState.language === 'EN'
       ? `Your request has been cancelled. Feel free to make a new one! ❌😉`
       : `Tu solicitud ha sido cancelada. ¡Siéntete libre de hacer una nueva! ❌😉`
@@ -361,10 +495,29 @@ export class ServiceController {
     return cancelRepresentations.some(value => upperCaseInput?.includes(value))
   }
 
+  private isCancelProgressedTrip(input: string): boolean {
+    const cancelList = ['Cancelar el viaje', 'Cancel Trip']
+    const upperCaseInput = input?.toUpperCase()
+    return cancelList.some((cancelWord) => upperCaseInput.includes(cancelWord))
+  }
+
+  private okProgressTrip(input: string): boolean {
+    const cancelList = ['Ok']
+    const upperCaseInput = input?.toUpperCase()
+    return cancelList.some(c => upperCaseInput.includes(c.toUpperCase()))
+  }
+
+
   private isHelpRequested(input: string): boolean {
     const helpRepresentations = ['I NEED HELP', 'NECESITO AYUDA']
     const upperCaseInput = input?.toUpperCase()
-    return helpRepresentations.some(token => upperCaseInput?.includes(token))
+    return helpRepresentations.some(t => upperCaseInput?.includes(t.toUpperCase()))
+  }
+
+  private startSessionRequested(input: string): boolean {
+    const representations = ['Start', 'Empezar']
+    const upperCaseInput = input?.toUpperCase()
+    return representations.some(t => upperCaseInput?.includes(t.toUpperCase()))
   }
 
   private loggingEntryMessage(entryMessage: Message, phoneNumberId: string, userPhoneNumber: string, userMessage: string | undefined) {
@@ -393,7 +546,7 @@ export class ServiceController {
         },
         headers: { 'Content-Type': 'application/json' }
       })
-      console.log('Message send successfully')
+      console.log('Message sent successfully')
       // const statusCode = response.status === 200 ? 200 : 400
       // res.sendStatus(statusCode)
     } catch (e: any) {
@@ -401,8 +554,5 @@ export class ServiceController {
       this.cancelTravelRequest(phoneNumberId)
       throw new Error('Failed')
     }
-
   }
-
-
 }

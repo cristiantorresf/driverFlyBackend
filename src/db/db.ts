@@ -4,7 +4,9 @@ import { DataSource, DataSourceOptions } from 'typeorm'
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies'
 import { Trip } from './entities/trip'
 import { config } from '../config/config'
+import * as dotenv from 'dotenv'
 
+dotenv.config()
 
 const log = { info: console.log, error: console.error }
 
@@ -25,7 +27,7 @@ export const dbOptions: DataSourceOptions = {
   logging: false,
   namingStrategy: new SnakeNamingStrategy()
 }
-
+// console.log(dbOptions)
 const db = new DataSource(dbOptions)
 // eslint-disable-next-line import/no-default-export
 
