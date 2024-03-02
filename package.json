@@ -4,7 +4,7 @@
   "description": "Skeleton for new typescript services based on hexagonal architecture",
   "main": "src/main.js",
   "scripts": {
-    "postbuild": "EXPORT NODE_ENV=production if [ \"$NODE_ENV\" != \"production\" ]; then npm run migration; fi && npm run generateSchema",
+    "postbuild": "if [ \"$NODE_ENV\" != \"production\" ]; then npm run migration; fi && npm run generateSchema",
     "migration": "npx typeorm-ts-node-commonjs migration:run -d ./src/db/db.ts",
     "migration:create": "ts-node scripts/generate-migration.ts",
     "generateSchema": "ts-node scripts/generate-gql-schema.ts",
