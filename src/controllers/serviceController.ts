@@ -132,7 +132,11 @@ export class ServiceController {
     const body = req.body as WhatsAppMessageEntry
     const { entry } = body
     if (!entry) return res.sendStatus(400)
-    const { metadata: { phone_number_id: phoneNumberId }, messages } = entry[0].changes[0].value
+    const { metadata: { phone_number_id: phoneNumberId }, messages } = entry[0]?.changes[0]?.value
+    if (!messages) {
+      console.log('No message in the payload ')
+      return res.sendStatus(400)
+    }
     const [entryMessage] = messages!
     if (!entryMessage || !phoneNumberId) {
       console.log('no json payload body 🤨🤨🤨')
