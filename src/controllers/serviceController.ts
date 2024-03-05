@@ -437,11 +437,10 @@ export class ServiceController {
   }
 
   async handleUserNotConfirm(currentState: UserState, phoneId: string, phone: string) {
-    currentState.state = CUSTOMER_STATES.RESTART
     const msg = this.utilCheckLanguage({
       currentState,
-      es: 'Alright let`s start over again 🚗 ',
-      en: 'Ok, empezemos nuevamente 🚗'
+      es: 'Ok, empezemos nuevamente, enviane un mensaje para comenzar 🚗 ',
+      en: 'Alright let`s start over again, send me a message to start over 🚗'
     })
     await this.sendMessage(phoneId, phone, msg)
     this.cancelTravelRequest(phoneId)
@@ -544,12 +543,13 @@ export class ServiceController {
         }
         currentState.data.destination = userMessage
         const userLocation = currentState.data.location
-        const googleLink = `https://www.google.com/maps/@${userLocation?.latitude!},${userLocation?.longitude},15z`
+        const googleLink = `https://www.google.com/maps/@${userLocation?.latitude!},${userLocation?.longitude},20z`
+        const msg = this.utilCheckLanguage({ currentState, es: 'con este nombre', en: 'with this name' })
         const templateInformation: TemplateComponent[] = [
           {
             type: 'body',
             parameters: [
-              { type: 'text', text: googleLink }
+              { type: 'text', text: `${googleLink} ${msg} : ${currentState.data.name}` }
             ]
           }
         ]
