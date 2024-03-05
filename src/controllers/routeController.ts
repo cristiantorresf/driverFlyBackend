@@ -16,6 +16,7 @@ router.get('/webhook', serviceController.verifyWebhookWithMeta.bind(serviceContr
 router.post('/webhook', serviceController.receivedWhatsappMessage.bind(serviceController))
 router.get('/webhook/reset', serviceController.resetStatePersistence.bind(serviceController))
 router.get('/userStates', serviceController.getUserStates.bind(serviceController))
+router.get('/check', serviceController.renderWebhookEvent.bind(serviceController))
 router.get('/', (req: any, res: any) => res.send('<H1>SERVER RUNNING SUCCESSFULLY 😎🥳</H1>'))
 
 export default router

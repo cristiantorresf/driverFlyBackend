@@ -87,6 +87,7 @@ export class ServiceController {
   token: string | undefined
   private userStates: Map<PhoneNumber, UserState>
   private response: Response | undefined
+  private bodyResponse: string | undefined
 
   constructor(
     private servicesAction: ServicesAction,
@@ -96,6 +97,7 @@ export class ServiceController {
     this.token = process.env.WHATSAPP_TOKEN
     this.userStates = new Map()
     console.log(this.userStates)
+    this.bodyResponse = ''
   }
 
   async resetStatePersistence(_req: Request, res: Response) {
@@ -140,6 +142,11 @@ export class ServiceController {
   async receivedWhatsappMessage(req: Request, res: Response) {
     this.response = res
     this.log.info('😎😎😎🔥🔥 post webhook reached')
+    try {
+      this.bodyResponse = JSON.stringify(req.body, null, 2)
+    } catch (e: any) {
+      console.log('Couldn\'t see the webhook response from whatsapp', e.message)
+    }
     const body = req.body as WhatsAppMessageEntry
     if (!body) return res.sendStatus(400)
     const { entry } = body
@@ -331,7 +338,7 @@ export class ServiceController {
 
     // Loop over the Map entries and add them to the response string
     for (const [userStateKey, userStateValue] of this.userStates.entries()) {
-      userStatesHTML += `<pre>User Key: ${userStateKey} => User Value: ${JSON.stringify(userStateValue, null, 2)}</pre>`
+      userStatesHTML += `<pre>Telefono Usuario: ${userStateKey} => Estado Usuario: ${JSON.stringify(userStateValue, null, 2)}</pre>`
     }
 
     // The complete HTML response
@@ -370,6 +377,56 @@ export class ServiceController {
       <body>
         <h2 style='color:white;'>User States:</h2>
         ${userStatesHTML}
+        <button id='refreshBtn' onclick='location.reload();'>Refresh</button>
+      </body>
+    </html>`
+
+    // Send HTML response
+    res.send(htmlResponse)
+  }
+
+  async renderWebhookEvent(_req: Request, res: Response) {
+    const webHookEvent: string = `<pre> ${this.bodyResponse} </pre>`
+
+    // Loop over the Map entries and add them to the response string
+
+
+    // The complete HTML response
+    const htmlResponse = `
+    <html lang='en'>
+      <head>
+        <title>Webhook State</title>
+        <style>
+          body{
+            background-color: #171717; /* Dark background */
+          }
+
+          pre{
+            color: orange; /* Green text */
+          }
+          #refreshBtn {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 10px;
+        font-size: 1em;
+        background-color: lime;
+        color: black;
+        border: none;
+        cursor: pointer;
+        border-radius: 5px;
+        box-shadow: 0 0 8px rgba(0,0,0,0.1);
+      }
+
+      #refreshBtn:hover {
+        background-color: #bada55;
+        box-shadow: 0 0 16px rgba(0,0,0,0.2);
+      }
+        </style>
+      </head>
+      <body>
+        <h2 style='color:white;'>Webhook State:</h2>
+        ${webHookEvent}
         <button id='refreshBtn' onclick='location.reload();'>Refresh</button>
       </body>
     </html>`

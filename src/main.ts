@@ -46,6 +46,7 @@ async function createServer() {
       const url = process.env.NODE_ENV === 'development' ? `http://localhost:${port}` : `https://driverflybackend-production.up.railway.app`
       console.log(`🚀 Server ready at ${url}/api`)
       console.log(`🚀 See states at ${url}/api/userStates`)
+      console.log(`🚀 See the webhook at ${url}/api/check`)
       console.log(`🚀 GraphQl Server ready at ${url}/graphql`)
     })
   )
