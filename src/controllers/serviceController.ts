@@ -480,12 +480,7 @@ export class ServiceController {
 
   private handleUnwantedEvents(body: WhatsAppMessageEntry) {
     const statuses = body?.entry?.[0]?.changes?.[0]?.value?.statuses
-    if (statuses || Array.isArray(statuses) || statuses!.length > 0) {
-      // unwanted events from facebook
-      return true
-    } else {
-      return false
-    }
+    return !!(statuses || Array.isArray(statuses) || statuses!?.length > 0)
   }
 
   // @ts-ignore
