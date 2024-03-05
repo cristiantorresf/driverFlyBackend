@@ -543,7 +543,8 @@ export class ServiceController {
           await this.sendMessageWithLangCheck(input, userData)
         }
         currentState.data.destination = userMessage
-        const googleLink = 'https://www.google.com/maps/@4.7110,-74.0721,15z'
+        const userLocation = currentState.data.location
+        const googleLink = `https://www.google.com/maps/@${userLocation?.latitude!},${userLocation?.longitude},15z`
         const templateInformation: TemplateComponent[] = [
           {
             type: 'body',
@@ -553,8 +554,6 @@ export class ServiceController {
           }
         ]
         currentState.state = CUSTOMER_STATES.AWAITING_CONFIRMATION
-        const msgBody = LanguageMessages[currentState.language].COMPLETED(name!, JSON.stringify(location), userMessage!)
-        await this.sendMessage(phoneNumberId, userPhoneNumber, msgBody)
         await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.CONFIRMATION, lang, templateInformation)
         break
       case CUSTOMER_STATES.AWAITING_CONFIRMATION:
