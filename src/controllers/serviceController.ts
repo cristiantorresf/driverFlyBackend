@@ -15,8 +15,8 @@ const LanguageMessages = {
     AWAITING_LANGUAGE: 'Please select your language: Reply with \'EN\' for English or \'ES\' for Spanish. /n Por favor, selecciona tu idioma: Responde con \'EN\' para inglés o \'ES\' para español.',
     AWAITING_NAME: 'What\'s your name and lastname?',
     AWAITING_LOCATION: 'Great! Now, please share your location by attaching it in WhatsApp.',
-    AWAITING_DESTINATION: 'Almost there! Where would you like to go? Please share your destination address.',,
-    AWAITING_CONFIRMATION:'AWAITING_CONFIRMATION',
+    AWAITING_DESTINATION: 'Almost there! Where would you like to go? Please share your destination address.',
+    AWAITING_CONFIRMATION: 'AWAITING_CONFIRMATION',
     LOCATION_NOT_PROVIDED: 'LOCATION_NOT_PROVIDED',
     COMPLETED: (name: string, location: string, destination: string) => `🙏 Thank you, ${name}! 🚗 A driver will send a car to ${location} to take you to ${destination} soon. 😊 To cancel please press 5. ⏹️`,
     RESTART: 'Your request has been canceled. Would you like to book another trip? If so, please share your name to start again.',
@@ -45,7 +45,8 @@ const CUSTOMER_STATES: Record<States, States> = {
   AWAITING_CONFIRMATION: 'AWAITING_CONFIRMATION',
   COMPLETED: 'COMPLETED',
   RESTART: 'RESTART',
-  AWAITING_DISPATCHER: 'AWAITING_DISPATCHER'
+  AWAITING_DISPATCHER: 'AWAITING_DISPATCHER',
+  LOCATION_NOT_PROVIDED: 'LOCATION_NOT_PROVIDED'
 }
 
 
@@ -77,7 +78,8 @@ interface UserState {
     errorState?: string
   }
 }
-type TranslateArgs = {currentState: UserState, es: string, en: string}
+
+type TranslateArgs = { currentState: UserState, es: string, en: string }
 type UserData = { phoneId: string, phone: string, currentState?: UserState }
 
 @Service()
@@ -376,6 +378,48 @@ export class ServiceController {
     res.send(htmlResponse)
   }
 
+  async handleUserNotConfirm(currentState: UserState, phoneId: string, phone: string) {
+    currentState.state = CUSTOMER_STATES.RESTART
+    const msg = this.utilCheckLanguage({
+      currentState,
+      es: 'Alright let`s start over again 🚗 ',
+      en: 'Ok, empezemos nuevamente 🚗'
+    })
+    await this.sendMessage(phoneId, phone, msg)
+    this.cancelTravelRequest(phoneId)
+  }
+
+  async handleConfirmation(currentState: UserState, phoneId: string, phone: string) {
+    const msg = this.utilCheckLanguage({
+      currentState,
+      es: 'Has confirmado tu viaje satisfactoriamente 🫡',
+      en: 'You have confirmed your travel with success 🫡'
+    })
+    currentState.state = CUSTOMER_STATES.COMPLETED
+    const name = currentState.data.name
+    const destination = currentState.data.destination
+    await this.sendMessage(phoneId, phone, msg)
+    const imageLink = 'https://th.bing.com/th/id/OIP.2mNmmW7iIdlsCRqxKKUq0QHaI4?rs=1&pid=ImgDetMain'
+    const templateInformation: TemplateComponent[] = [
+      {
+        type: 'header',
+        parameters: [
+          { type: 'image', image: { link: imageLink } }
+        ]
+      },
+      {
+        type: 'body',
+        parameters: [
+          { type: 'text', text: name! },
+          { type: 'text', text: destination! }
+
+        ]
+      }
+    ]
+    const lang = currentState.language
+    await this.sendTemplate(phoneId, phone, TEMPLATES.COMPLETED, lang, templateInformation)
+  }
+
   // @ts-ignore
   private async sendEngagementTemplate(phoneId, userPhone, language) {
     const templateName: TemplateComponent[] = [
@@ -401,8 +445,8 @@ export class ServiceController {
     switch (currentState.state) {
       case CUSTOMER_STATES.AWAITING_NAME:
         if (!userMessage) {
-          const input = {currentState, es:'No me enviaste un nombre valido', en:'Not valid name was provided'}
-          const userData = {phoneId: phoneNumberId, phone: userPhoneNumber }
+          const input = { currentState, es: 'No me enviaste un nombre valido', en: 'Not valid name was provided' }
+          const userData = { phoneId: phoneNumberId, phone: userPhoneNumber }
           await this.sendMessageWithLangCheck(input, userData)
           currentState.data.errorState = 'User did not send the name'
           break
@@ -426,33 +470,28 @@ export class ServiceController {
         break
       case CUSTOMER_STATES.AWAITING_DESTINATION:
         if (!userMessage) {
-          const input = {currentState, es:'No me enviaste un destino valido', en:'Not valid destination was provided'}
-          const userData = {phoneId: phoneNumberId, phone: userPhoneNumber }
+          const input = {
+            currentState,
+            es: 'No me enviaste un destino valido',
+            en: 'Not valid destination was provided'
+          }
+          const userData = { phoneId: phoneNumberId, phone: userPhoneNumber }
           currentState.data.errorState = 'User did not sent destination'
           await this.sendMessageWithLangCheck(input, userData)
         }
         currentState.data.destination = userMessage
-        const imageLink = 'https://th.bing.com/th/id/OIP.2mNmmW7iIdlsCRqxKKUq0QHaI4?rs=1&pid=ImgDetMain'
+        const googleLink = 'https://www.google.com/maps/@4.7110,-74.0721,15z'
         const templateInformation: TemplateComponent[] = [
-          {
-            type: 'header',
-            parameters: [
-              { type: 'image', image: { link: imageLink } }
-            ]
-          },
           {
             type: 'body',
             parameters: [
-              { type: 'text', text: name! },
-              { type: 'text', text: userMessage! }
-
+              { type: 'text', text: googleLink }
             ]
           }
         ]
         currentState.state = CUSTOMER_STATES.AWAITING_CONFIRMATION
         const msgBody = LanguageMessages[currentState.language].COMPLETED(name!, JSON.stringify(location), userMessage!)
         await this.sendMessage(phoneNumberId, userPhoneNumber, msgBody)
-        await this.addRecordToDatabase(currentState, userPhoneNumber)
         await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.CONFIRMATION, lang, templateInformation)
         break
       case CUSTOMER_STATES.AWAITING_CONFIRMATION:
@@ -483,6 +522,7 @@ export class ServiceController {
           break
         }
         currentState.state = CUSTOMER_STATES.AWAITING_DISPATCHER
+        await this.addRecordToDatabase(currentState, userPhoneNumber)
         // save to database and create frontend
         break
     }
@@ -497,46 +537,13 @@ export class ServiceController {
   }
 
   private utilCheckLanguage({ currentState, es, en }: TranslateArgs) {
-      return currentState.language === 'ES' ? es : en
+    return currentState.language === 'ES' ? es : en
   }
 
-  private async sendMessageWithLangCheck({currentState, es, en}: TranslateArgs, userData: UserData) {
-    const msg = this.utilCheckLanguage({currentState, es, en})
+  private async sendMessageWithLangCheck({ currentState, es, en }: TranslateArgs, userData: UserData) {
+    const msg = this.utilCheckLanguage({ currentState, es, en })
     const { phoneId, phone } = userData
     return this.sendMessage(phoneId, phone, msg)
-  }
-  async handleUserNotConfirm(currentState: UserState, phoneId: string, phone: string) {
-    currentState.state = CUSTOMER_STATES.RESTART
-    const msg = this.utilCheckLanguage({currentState, es: 'Alright let`s start over again 🚗 ', en: 'Ok, empezemos nuevamente 🚗'})
-    await this.sendMessage(phoneId, phone, msg)
-    this.cancelTravelRequest(phoneId)
-    }
-
-  async handleConfirmation(currentState: UserState, phoneId: string, phone: string) {
-    const msg = this.utilCheckLanguage({currentState, es: 'Has confirmado tu viaje satisfactoriamente 🫡', en: 'You have confirmed your travel with success 🫡'})
-    currentState.state = CUSTOMER_STATES.COMPLETED
-    const name = currentState.data.name
-    const destination = currentState.data.destination
-    await this.sendMessage(phoneId, phone, msg)
-    const imageLink = 'https://th.bing.com/th/id/OIP.2mNmmW7iIdlsCRqxKKUq0QHaI4?rs=1&pid=ImgDetMain'
-    const templateInformation: TemplateComponent[] = [
-      {
-        type: 'header',
-        parameters: [
-          { type: 'image', image: { link: imageLink } }
-        ]
-      },
-      {
-        type: 'body',
-        parameters: [
-          { type: 'text', text: name! },
-          { type: 'text', text: destination! }
-
-        ]
-      }
-    ]
-    const lang = currentState.language
-    await this.sendTemplate(phoneId, phone, TEMPLATES.COMPLETED, lang, templateInformation )
   }
 
   private async handleFirstStep(currentState: UserState, phoneNumberId: string, userPhoneNumber: string) {
@@ -588,7 +595,6 @@ export class ServiceController {
     const upperCaseInput = input?.toUpperCase()
     return cancelRepresentations.some(value => upperCaseInput?.includes(value))
   }
-
 
 
   private isCancelProgressedTrip(input: string): boolean {

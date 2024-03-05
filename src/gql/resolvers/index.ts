@@ -1,12 +1,10 @@
 import { mergeDeepRight } from 'ramda'
-import authenticationResolvers from './auth/authenticationResolver'
-import partnerResolvers from './partners/partnerResolver'
-import advertisingResolvers from './ads/adsResolver'
+import adsResolver from './trips/tripResolver'
 
 // console.log('add dependencies type', typeof addDependencies)
 
 
-export const resolvers = [authenticationResolvers, partnerResolvers, advertisingResolvers]
+export const resolvers = [adsResolver]
   .reduce((merged, resolver: any) => mergeDeepRight(merged, resolver), {})
 
 

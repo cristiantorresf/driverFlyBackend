@@ -17,6 +17,7 @@ import { LoggerService } from './services/LoggerService'
 import db from './db/db'
 import { Trip } from './db/entities/trip'
 import { DatabaseRespositories } from './utils/databaseUtils'
+import { resolvers } from './gql/resolvers'
 
 
 dotenv.config()
@@ -26,7 +27,7 @@ async function createServer() {
   const httpServer = http.createServer(app)
   const server = new ApolloServer({
     typeDefs,
-    resolvers: {},
+    resolvers,
     plugins: [ApolloServerPluginDrainHttpServer({ httpServer }), SendTokenOverHeaders()],
     introspection: process.env.NODE_ENV === 'development'
   })

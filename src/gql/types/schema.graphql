@@ -1,56 +1,11 @@
-type Partner {
-    id: ID
-    name: String!
-    username: String
-    email: String!
-}
-
-type Ad {
-    id: ID,
-    title: String,
-    description: String,
-    location: String,
-    phoneNumber: String,
-    promoteImage: String,
-    imageList: [String]
-}
-
-input AdInput {
-    title: String,
-    description: String,
-    location: String,
-    phoneNumber: String,
-    promoteImage: String,
-    imageList: [String],
-    partner: ID,
-}
-
-input PartnerInput {
-    name: String!
-    username: String
-    email: String!
-    password: String!
-}
-
-input LoginInput {
-    email: String!
-    password: String!
-}
-
-input DeletePartnerInput {
-    email: String
-    id: String
-    username: String
+type Trip {
+    name: String
+    destination: String
+    requestedAt: String
+    location: String
+    status: String
 }
 
 type Query {
-    login(input: LoginInput!): Partner
-    getAds: [Ad]
-    getAd(id: ID!): Ad!
-}
-
-type Mutation {
-    registerPartner(input: PartnerInput): Partner
-    deletePartner(input: DeletePartnerInput): Boolean
-    createAd(input: AdInput): Ad
+    trips: [Trip]
 }
