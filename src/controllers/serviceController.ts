@@ -443,6 +443,8 @@ export class ServiceController {
       en: 'Alright let`s start over again, send me a message to start over 🚗'
     })
     await this.sendMessage(phoneId, phone, msg)
+    currentState.state = CUSTOMER_STATES.FIRST_STEP
+    currentState.data = {}
     this.cancelTravelRequest(phoneId)
   }
 
@@ -553,7 +555,13 @@ export class ServiceController {
             ]
           }
         ]
+        const message = this.utilCheckLanguage({
+          currentState,
+          en: `WAIT a second we are processing your request 🏋🏻‍ this is your location ${googleLink}`,
+          es: `Espera un momento nosotros estamos procesando tu solicitud ahora, esta es tu ubicacion ${googleLink} ☎️`
+        })
         currentState.state = CUSTOMER_STATES.AWAITING_CONFIRMATION
+        await this.sendMessage(phoneNumberId, userPhoneNumber, message)
         await this.sendTemplate(phoneNumberId, userPhoneNumber, TEMPLATES.CONFIRMATION, lang, templateInformation)
         break
       case CUSTOMER_STATES.AWAITING_CONFIRMATION:
