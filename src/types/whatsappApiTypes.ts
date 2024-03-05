@@ -35,7 +35,7 @@ interface Contact {
 
 interface Status {
   id: string
-  status: string
+  status: string | 'sent' | 'read' | 'delivered'
   timestamp: string
   recipient_id: string
   conversation?: Conversation
@@ -45,15 +45,15 @@ interface Status {
 interface Conversation {
   id: string
   origin: {
-    type: string;
+    type: string | 'marketing';
   }
   expiration_timestamp?: string
 }
 
 interface Pricing {
   billable: boolean
-  pricing_model: string
-  category: string
+  pricing_model: string | 'CBP'
+  category: string | 'marketing'
 }
 
 export interface Message {

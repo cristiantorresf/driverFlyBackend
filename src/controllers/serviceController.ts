@@ -141,6 +141,7 @@ export class ServiceController {
 
   async receivedWhatsappMessage(req: Request, res: Response) {
     this.response = res
+    if (this.handleUnwantedEvents(req.body)) return res.sendStatus(200)
     this.log.info('😎😎😎🔥🔥 post webhook reached')
     try {
       this.bodyResponse = JSON.stringify(req.body, null, 2)
@@ -475,6 +476,16 @@ export class ServiceController {
     ]
     const lang = currentState.language
     await this.sendTemplate(phoneId, phone, TEMPLATES.COMPLETED, lang, templateInformation)
+  }
+
+  private handleUnwantedEvents(body: WhatsAppMessageEntry) {
+    const statuses = body?.entry?.[0]?.changes?.[0]?.value?.statuses
+    if (statuses || Array.isArray(statuses) || statuses!.length > 0) {
+      // unwanted events from facebook
+      return true
+    } else {
+      return false
+    }
   }
 
   // @ts-ignore
