@@ -186,7 +186,7 @@ export class ServiceController {
         }
         return res.sendStatus(200)
       }
-      if (currentState.state === CUSTOMER_STATES.AWAITING_DISPATCHER) {
+      if (currentState.state === CUSTOMER_STATES.AWAITING_DISPATCHER && !currentState.data.sentProgressWarn) {
         const templateName = TEMPLATES.IN_PROGRESS
         await this.sendTemplate(phoneNumberId, userPhoneNumber, templateName, currentState.language)
         currentState.data.sentProgressWarn = true

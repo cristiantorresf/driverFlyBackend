@@ -1,14 +1,12 @@
 // models/partner.ts
 
 import mongoose, { Document, Schema } from 'mongoose'
-import { Ad } from '../../gql/types/typedSchema'
 
 export type Partner = {
   name: string;
   username: string;
   email: string;
   password: string;
-  ads?: Ad[];
 }
 
 // Let's extend Document using our Partner type
